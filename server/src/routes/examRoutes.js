@@ -4,9 +4,10 @@ import { examAgent } from '../agents/examAgent.js';
 
 const router = Router();
 
-// GET /api/exams - List all exams with countdowns
+// GET /api/exams - List exams for current user
 router.get('/', (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const rows = db.prepare(`
       SELECT 
         e.*,
@@ -15,8 +16,9 @@ router.get('/', (req, res) => {
         s.color as subject_color
       FROM exams e
       LEFT JOIN subjects s ON e.subject_id = s.id
+      WHERE e.user_id = ?
       ORDER BY e.exam_date ASC
-    `).all();
+    `).all(userId);
 
     const now = new Date();
     const exams = rows.map(r => {
@@ -40,6 +42,7 @@ router.get('/', (req, res) => {
 // POST /api/exams - Create a new exam
 router.post('/', async (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { subject_id, title, exam_date, weight_percent = 20, target_score = 90, topics_covered = [], notes = '' } = req.body;
 
     if (!subject_id || !title || !exam_date) {
@@ -50,9 +53,9 @@ router.post('/', async (req, res) => {
     const milestones = examAgent.generateRevisionMilestones(title, exam_date, topicsArr);
 
     const info = db.prepare(`
-      INSERT INTO exams (subject_id, title, exam_date, weight_percent, target_score, topics_covered, revision_milestones, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(Number(subject_id), title.trim(), exam_date, Number(weight_percent) || 20, Number(target_score) || 90, JSON.stringify(topicsArr), JSON.stringify(milestones), notes.trim());
+      INSERT INTO exams (user_id, subject_id, title, exam_date, weight_percent, target_score, topics_covered, revision_milestones, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(userId, Number(subject_id), title.trim(), exam_date, Number(weight_percent) || 20, Number(target_score) || 90, JSON.stringify(topicsArr), JSON.stringify(milestones), notes.trim());
 
     const created = db.prepare('SELECT * FROM exams WHERE id = ?').get(info.lastInsertRowid);
     res.status(201).json({
@@ -68,18 +71,19 @@ router.post('/', async (req, res) => {
   }
 });
 
-// POST /api/exams/:id/generate-revision - Generate or refresh revision milestones
+// POST /api/exams/:id/generate-revision
 router.post('/:id/generate-revision', (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { id } = req.params;
-    const exam = db.prepare('SELECT * FROM exams WHERE id = ?').get(id);
+    const exam = db.prepare('SELECT * FROM exams WHERE id = ? AND user_id = ?').get(id, userId);
     if (!exam) return res.status(404).json({ error: 'Exam not found' });
 
     const topics = JSON.parse(exam.topics_covered || '[]');
     const milestones = examAgent.generateRevisionMilestones(exam.title, exam.exam_date, topics);
 
-    db.prepare('UPDATE exams SET revision_milestones = ? WHERE id = ?')
-      .run(JSON.stringify(milestones), id);
+    db.prepare('UPDATE exams SET revision_milestones = ? WHERE id = ? AND user_id = ?')
+      .run(JSON.stringify(milestones), id, userId);
 
     res.json({ success: true, revision_milestones: milestones });
   } catch (error) {
@@ -87,19 +91,20 @@ router.post('/:id/generate-revision', (req, res) => {
   }
 });
 
-// PUT /api/exams/:id/milestone/:index - Toggle milestone completed status
+// PUT /api/exams/:id/milestone/:index
 router.put('/:id/milestone/:index', (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { id, index } = req.params;
-    const exam = db.prepare('SELECT * FROM exams WHERE id = ?').get(id);
+    const exam = db.prepare('SELECT * FROM exams WHERE id = ? AND user_id = ?').get(id, userId);
     if (!exam) return res.status(404).json({ error: 'Exam not found' });
 
     const milestones = JSON.parse(exam.revision_milestones || '[]');
     const idx = Number(index);
     if (idx >= 0 && idx < milestones.length) {
       milestones[idx].done = !milestones[idx].done;
-      db.prepare('UPDATE exams SET revision_milestones = ? WHERE id = ?')
-        .run(JSON.stringify(milestones), id);
+      db.prepare('UPDATE exams SET revision_milestones = ? WHERE id = ? AND user_id = ?')
+        .run(JSON.stringify(milestones), id, userId);
     }
 
     res.json({ success: true, revision_milestones: milestones });
@@ -108,11 +113,12 @@ router.put('/:id/milestone/:index', (req, res) => {
   }
 });
 
-// DELETE /api/exams/:id - Delete exam
+// DELETE /api/exams/:id
 router.delete('/:id', (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { id } = req.params;
-    db.prepare('DELETE FROM exams WHERE id = ?').run(id);
+    db.prepare('DELETE FROM exams WHERE id = ? AND user_id = ?').run(id, userId);
     res.json({ success: true, message: 'Exam deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete exam', details: error.message });

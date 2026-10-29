@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { db } from '../db/database.js';
 import { assignmentAgent } from '../agents/assignmentAgent.js';
-import { reviewAgent } from '../agents/reviewAgent.js';
 
 const router = Router();
 
-// GET /api/assignments - List all assignments
+// GET /api/assignments - List assignments for current user
 router.get('/', (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const rows = db.prepare(`
       SELECT 
         a.*,
@@ -16,6 +16,7 @@ router.get('/', (req, res) => {
         s.color as subject_color
       FROM assignments a
       LEFT JOIN subjects s ON a.subject_id = s.id
+      WHERE a.user_id = ?
       ORDER BY 
         CASE a.status 
           WHEN 'urgent' THEN 1 
@@ -24,7 +25,7 @@ router.get('/', (req, res) => {
           ELSE 4 
         END,
         a.due_date ASC
-    `).all();
+    `).all(userId);
 
     const assignments = rows.map(r => {
       const subtasks = JSON.parse(r.subtasks || '[]');
@@ -49,6 +50,7 @@ router.get('/', (req, res) => {
 // POST /api/assignments - Create a new assignment
 router.post('/', async (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { subject_id, title, description = '', due_date, priority = 'medium', estimated_minutes = 60, autoBreakdown = false } = req.body;
     
     if (!subject_id || !title || !due_date) {
@@ -64,9 +66,9 @@ router.post('/', async (req, res) => {
     const calculatedPriority = priority || assignmentAgent.calculatePriority(due_date);
 
     const info = db.prepare(`
-      INSERT INTO assignments (subject_id, title, description, due_date, priority, status, estimated_minutes, subtasks)
+      INSERT INTO assignments (user_id, subject_id, title, description, due_date, priority, status, estimated_minutes, subtasks)
       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)
-    `).run(Number(subject_id), title.trim(), description.trim(), due_date, calculatedPriority, Number(estimated_minutes) || 60, JSON.stringify(subtasks));
+    `).run(userId, Number(subject_id), title.trim(), description.trim(), due_date, calculatedPriority, Number(estimated_minutes) || 60, JSON.stringify(subtasks));
 
     const created = db.prepare(`
       SELECT a.*, s.name as subject_name, s.color as subject_color
@@ -90,15 +92,15 @@ router.post('/', async (req, res) => {
 // POST /api/assignments/:id/breakdown - Generate AI subtasks for an assignment
 router.post('/:id/breakdown', async (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { id } = req.params;
-    const assignment = db.prepare('SELECT * FROM assignments WHERE id = ?').get(id);
+    const assignment = db.prepare('SELECT * FROM assignments WHERE id = ? AND user_id = ?').get(id, userId);
     if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
 
     const breakdownResult = await assignmentAgent.breakdownAssignment(assignment);
     
-    // Save updated subtasks
-    db.prepare('UPDATE assignments SET subtasks = ? WHERE id = ?')
-      .run(JSON.stringify(breakdownResult.subtasks), id);
+    db.prepare('UPDATE assignments SET subtasks = ? WHERE id = ? AND user_id = ?')
+      .run(JSON.stringify(breakdownResult.subtasks), id, userId);
 
     res.json({
       success: true,
@@ -113,13 +115,12 @@ router.post('/:id/breakdown', async (req, res) => {
 // PUT /api/assignments/:id/subtask/:subtaskId - Toggle a subtask
 router.put('/:id/subtask/:subtaskId', (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { id, subtaskId } = req.params;
-    const assignment = db.prepare('SELECT * FROM assignments WHERE id = ?').get(id);
+    const assignment = db.prepare('SELECT * FROM assignments WHERE id = ? AND user_id = ?').get(id, userId);
     if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
 
     let subtasks = JSON.parse(assignment.subtasks || '[]');
-    let allCompleted = true;
-
     subtasks = subtasks.map(t => {
       if (t.id === Number(subtaskId)) {
         return { ...t, completed: !t.completed };
@@ -130,8 +131,8 @@ router.put('/:id/subtask/:subtaskId', (req, res) => {
     const isAllDone = subtasks.length > 0 && subtasks.every(t => t.completed);
     const newStatus = isAllDone ? 'completed' : (subtasks.some(t => t.completed) ? 'in_progress' : assignment.status);
 
-    db.prepare('UPDATE assignments SET subtasks = ?, status = ? WHERE id = ?')
-      .run(JSON.stringify(subtasks), newStatus, id);
+    db.prepare('UPDATE assignments SET subtasks = ?, status = ? WHERE id = ? AND user_id = ?')
+      .run(JSON.stringify(subtasks), newStatus, id, userId);
 
     res.json({ success: true, subtasks, status: newStatus });
   } catch (error) {
@@ -142,6 +143,7 @@ router.put('/:id/subtask/:subtaskId', (req, res) => {
 // PUT /api/assignments/:id - Update assignment details / status
 router.put('/:id', (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { id } = req.params;
     const { title, description, due_date, priority, status, estimated_minutes } = req.body;
 
@@ -153,8 +155,8 @@ router.put('/:id', (req, res) => {
           priority = COALESCE(?, priority),
           status = COALESCE(?, status),
           estimated_minutes = COALESCE(?, estimated_minutes)
-      WHERE id = ?
-    `).run(title, description, due_date, priority, status, estimated_minutes, id);
+      WHERE id = ? AND user_id = ?
+    `).run(title, description, due_date, priority, status, estimated_minutes, id, userId);
 
     const updated = db.prepare('SELECT * FROM assignments WHERE id = ?').get(id);
     res.json({
@@ -172,8 +174,9 @@ router.put('/:id', (req, res) => {
 // DELETE /api/assignments/:id - Delete assignment
 router.delete('/:id', (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { id } = req.params;
-    db.prepare('DELETE FROM assignments WHERE id = ?').run(id);
+    db.prepare('DELETE FROM assignments WHERE id = ? AND user_id = ?').run(id, userId);
     res.json({ success: true, message: 'Assignment deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete assignment', details: error.message });

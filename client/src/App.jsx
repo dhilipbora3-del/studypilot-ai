@@ -10,7 +10,8 @@ import ExamsView from './components/ExamsView';
 import FlashcardsView from './components/FlashcardsView';
 import TimerView from './components/TimerView';
 import AgentSystemModal from './components/AgentSystemModal';
-import { apiStats, apiPlanner, apiAssignments, apiExams, apiAgents } from './api';
+import AuthModal from './components/AuthModal';
+import { apiStats, apiPlanner, apiAssignments, apiExams, apiAgents, apiAuth, setAuthToken } from './api';
 import { 
   LayoutDashboard, 
   MessageSquare, 
@@ -28,6 +29,8 @@ import {
 export default function App() {
   const [currentTab, setCurrentTab] = useState('dashboard');
   const [chatInitialPrompt, setChatInitialPrompt] = useState('');
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [stats, setStats] = useState(null);
   const [todaySlots, setTodaySlots] = useState([]);
   const [assignments, setAssignments] = useState([]);
@@ -37,8 +40,21 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    loadGlobalData();
+    checkCurrentUser();
   }, []);
+
+  const checkCurrentUser = async () => {
+    try {
+      const res = await apiAuth.getMe();
+      if (res.user) {
+        setCurrentUser(res.user);
+      }
+    } catch (e) {
+      console.log('No active session, fallback to default student');
+    } finally {
+      loadGlobalData();
+    }
+  };
 
   const loadGlobalData = async () => {
     try {
@@ -59,6 +75,17 @@ export default function App() {
     } catch (e) {
       console.error('Failed to load global data', e);
     }
+  };
+
+  const handleAuthSuccess = (user) => {
+    setCurrentUser(user);
+    loadGlobalData();
+  };
+
+  const handleLogout = () => {
+    setAuthToken(null);
+    setCurrentUser(null);
+    setIsAuthModalOpen(true);
   };
 
   const handleToggleTodaySlot = async (slotId) => {
@@ -104,7 +131,10 @@ export default function App() {
       <Navbar
         streak={stats?.streakDays || 1}
         agentStatus={agentStatus}
+        currentUser={currentUser}
         onOpenSystemModal={() => setIsSystemModalOpen(true)}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onLogout={handleLogout}
         onNavigate={(tab) => {
           setCurrentTab(tab);
           setMobileMenuOpen(false);
@@ -124,9 +154,12 @@ export default function App() {
           <span className="font-bold text-white capitalize">{currentTab}</span>
         </div>
 
-        <span className="text-[11px] text-indigo-400 font-semibold">
-          StudyPilot Multi-Agent OS
-        </span>
+        <button
+          onClick={() => setIsAuthModalOpen(true)}
+          className="text-[11px] text-indigo-400 font-semibold flex items-center space-x-1"
+        >
+          <span>{currentUser?.name || 'Sign In'}</span>
+        </button>
       </div>
 
       {/* Mobile Drawer */}
@@ -241,6 +274,14 @@ export default function App() {
         isOpen={isSystemModalOpen}
         onClose={() => setIsSystemModalOpen(false)}
         agentStatus={agentStatus}
+      />
+
+      {/* User Authentication & Account Switcher Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onAuthSuccess={handleAuthSuccess}
+        currentUser={currentUser}
       />
     </div>
   );

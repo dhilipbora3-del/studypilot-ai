@@ -5,21 +5,23 @@ import { reviewAgent } from '../agents/reviewAgent.js';
 
 const router = Router();
 
-// GET /api/quizzes - List all quizzes
+// GET /api/quizzes - List quizzes for current user
 router.get('/', (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const rows = db.prepare(`
       SELECT 
         q.*,
         s.name as subject_name,
         s.code as subject_code,
         s.color as subject_color,
-        (SELECT COUNT(*) FROM quiz_attempts qa WHERE qa.quiz_id = q.id) as attempts_count,
-        (SELECT MAX(percentage) FROM quiz_attempts qa WHERE qa.quiz_id = q.id) as best_score
+        (SELECT COUNT(*) FROM quiz_attempts qa WHERE qa.quiz_id = q.id AND qa.user_id = ?) as attempts_count,
+        (SELECT MAX(percentage) FROM quiz_attempts qa WHERE qa.quiz_id = q.id AND qa.user_id = ?) as best_score
       FROM quizzes q
       LEFT JOIN subjects s ON q.subject_id = s.id
+      WHERE q.user_id = ?
       ORDER BY q.created_at DESC
-    `).all();
+    `).all(userId, userId, userId);
 
     const quizzes = rows.map(r => ({
       ...r,
@@ -35,13 +37,14 @@ router.get('/', (req, res) => {
 // GET /api/quizzes/:id - Get a specific quiz
 router.get('/:id', (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { id } = req.params;
     const row = db.prepare(`
       SELECT q.*, s.name as subject_name, s.color as subject_color
       FROM quizzes q
       LEFT JOIN subjects s ON q.subject_id = s.id
-      WHERE q.id = ?
-    `).get(id);
+      WHERE q.id = ? AND q.user_id = ?
+    `).get(id, userId);
 
     if (!row) return res.status(404).json({ error: 'Quiz not found' });
 
@@ -60,11 +63,12 @@ router.get('/:id', (req, res) => {
 // POST /api/quizzes/generate - Exam Agent generates a new mock quiz
 router.post('/generate', async (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { subject_id, topic, count = 4, difficulty = 'medium' } = req.body;
     let subjectName = 'General Studies';
 
     if (subject_id) {
-      const sub = db.prepare('SELECT name FROM subjects WHERE id = ?').get(subject_id);
+      const sub = db.prepare('SELECT name FROM subjects WHERE id = ? AND user_id = ?').get(subject_id, userId);
       if (sub) subjectName = sub.name;
     }
 
@@ -75,12 +79,11 @@ router.post('/generate', async (req, res) => {
       difficulty
     });
 
-    // Save generated quiz into DB
     const title = `${subjectName}: ${topic || 'Practice Mock Test'}`;
     const info = db.prepare(`
-      INSERT INTO quizzes (subject_id, topic, title, questions)
-      VALUES (?, ?, ?, ?)
-    `).run(subject_id ? Number(subject_id) : null, topic || 'General', title, JSON.stringify(examResult.questions));
+      INSERT INTO quizzes (user_id, subject_id, topic, title, questions)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(userId, subject_id ? Number(subject_id) : null, topic || 'General', title, JSON.stringify(examResult.questions));
 
     const savedQuiz = db.prepare('SELECT * FROM quizzes WHERE id = ?').get(info.lastInsertRowid);
 
@@ -104,18 +107,17 @@ router.post('/generate', async (req, res) => {
 // POST /api/quizzes/:id/submit - Evaluate answers deterministically
 router.post('/:id/submit', async (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { id } = req.params;
     const { answers = {} } = req.body;
 
-    const quizRow = db.prepare('SELECT * FROM quizzes WHERE id = ?').get(id);
+    const quizRow = db.prepare('SELECT * FROM quizzes WHERE id = ? AND user_id = ?').get(id, userId);
     if (!quizRow) return res.status(404).json({ error: 'Quiz not found' });
 
     const questions = JSON.parse(quizRow.questions || '[]');
 
-    // Step 1: Exam Agent evaluates answers deterministically
     const evaluation = examAgent.evaluateAnswers(questions, answers);
 
-    // Step 2: Review Agent verifies score arithmetic
     const reviewData = {
       score: evaluation.score,
       total: evaluation.totalQuestions,
@@ -123,11 +125,11 @@ router.post('/:id/submit', async (req, res) => {
     };
     const reviewResult = reviewAgent.verifyArithmetic(reviewData);
 
-    // Step 3: Record attempt in DB
     db.prepare(`
-      INSERT INTO quiz_attempts (quiz_id, subject_id, score, total_questions, percentage, answers, weak_topics, review_feedback)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO quiz_attempts (user_id, quiz_id, subject_id, score, total_questions, percentage, answers, weak_topics, review_feedback)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
+      userId,
       Number(id),
       quizRow.subject_id,
       evaluation.score,
@@ -152,18 +154,20 @@ router.post('/:id/submit', async (req, res) => {
   }
 });
 
-// GET /api/quizzes/stats/summary - Student quiz statistics
+// GET /api/quizzes/stats/summary
 router.get('/stats/summary', (req, res) => {
   try {
-    const totalAttempts = db.prepare('SELECT COUNT(*) as count FROM quiz_attempts').get().count;
-    const avgScore = db.prepare('SELECT AVG(percentage) as avg FROM quiz_attempts').get().avg || 0;
+    const userId = req.user?.id || 1;
+    const totalAttempts = db.prepare('SELECT COUNT(*) as count FROM quiz_attempts WHERE user_id = ?').get(userId).count;
+    const avgScore = db.prepare('SELECT AVG(percentage) as avg FROM quiz_attempts WHERE user_id = ?').get(userId).avg || 0;
     const recentAttempts = db.prepare(`
       SELECT qa.*, q.title as quiz_title
       FROM quiz_attempts qa
       LEFT JOIN quizzes q ON qa.quiz_id = q.id
+      WHERE qa.user_id = ?
       ORDER BY qa.completed_at DESC
       LIMIT 5
-    `).all();
+    `).all(userId);
 
     res.json({
       success: true,

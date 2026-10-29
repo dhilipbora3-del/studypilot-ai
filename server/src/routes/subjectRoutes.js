@@ -3,9 +3,10 @@ import { db } from '../db/database.js';
 
 const router = Router();
 
-// GET /api/subjects - List all subjects with topic counts and mastery stats
+// GET /api/subjects - List all subjects for current user
 router.get('/', (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const subjects = db.prepare(`
       SELECT 
         s.*,
@@ -14,9 +15,10 @@ router.get('/', (req, res) => {
         SUM(CASE WHEN t.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_topics
       FROM subjects s
       LEFT JOIN topics t ON s.id = t.subject_id
+      WHERE s.user_id = ?
       GROUP BY s.id
       ORDER BY s.confidence_level ASC, s.name ASC
-    `).all();
+    `).all(userId);
 
     res.json({ success: true, subjects });
   } catch (error) {
@@ -24,18 +26,19 @@ router.get('/', (req, res) => {
   }
 });
 
-// POST /api/subjects - Create a new subject
+// POST /api/subjects - Create a new subject for current user
 router.post('/', (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { name, code, color = 'indigo', icon = 'BookOpen', target_grade = 'A', confidence_level = 3 } = req.body;
     if (!name || name.trim().length === 0) {
       return res.status(400).json({ error: 'Subject name is required' });
     }
 
     const info = db.prepare(`
-      INSERT INTO subjects (name, code, color, icon, target_grade, confidence_level)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(name.trim(), code?.trim() || '', color, icon, target_grade, Number(confidence_level) || 3);
+      INSERT INTO subjects (user_id, name, code, color, icon, target_grade, confidence_level)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(userId, name.trim(), code?.trim() || '', color, icon, target_grade, Number(confidence_level) || 3);
 
     const created = db.prepare('SELECT * FROM subjects WHERE id = ?').get(info.lastInsertRowid);
     res.status(201).json({ success: true, subject: created });
@@ -47,6 +50,7 @@ router.post('/', (req, res) => {
 // PUT /api/subjects/:id - Update subject
 router.put('/:id', (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { id } = req.params;
     const { name, code, color, icon, target_grade, confidence_level } = req.body;
 
@@ -58,8 +62,8 @@ router.put('/:id', (req, res) => {
           icon = COALESCE(?, icon),
           target_grade = COALESCE(?, target_grade),
           confidence_level = COALESCE(?, confidence_level)
-      WHERE id = ?
-    `).run(name, code, color, icon, target_grade, confidence_level ? Number(confidence_level) : undefined, id);
+      WHERE id = ? AND user_id = ?
+    `).run(name, code, color, icon, target_grade, confidence_level ? Number(confidence_level) : undefined, id, userId);
 
     const updated = db.prepare('SELECT * FROM subjects WHERE id = ?').get(id);
     res.json({ success: true, subject: updated });
@@ -71,8 +75,9 @@ router.put('/:id', (req, res) => {
 // DELETE /api/subjects/:id - Delete subject
 router.delete('/:id', (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { id } = req.params;
-    db.prepare('DELETE FROM subjects WHERE id = ?').run(id);
+    db.prepare('DELETE FROM subjects WHERE id = ? AND user_id = ?').run(id, userId);
     res.json({ success: true, message: 'Subject deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete subject', details: error.message });

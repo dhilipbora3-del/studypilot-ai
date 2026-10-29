@@ -5,7 +5,9 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { initDatabase } from './db/database.js';
+import { requireAuth } from './middleware/authMiddleware.js';
 
+import authRoutes from './routes/authRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
 import subjectRoutes from './routes/subjectRoutes.js';
 import assignmentRoutes from './routes/assignmentRoutes.js';
@@ -32,16 +34,19 @@ app.use(express.json());
 // Initialize SQLite Database schema & seed data
 initDatabase();
 
-// Mount API routes
-app.use('/api/chat', chatRoutes);
-app.use('/api/subjects', subjectRoutes);
-app.use('/api/assignments', assignmentRoutes);
-app.use('/api/exams', examRoutes);
-app.use('/api/planner', plannerRoutes);
-app.use('/api/quizzes', quizRoutes);
-app.use('/api/flashcards', flashcardRoutes);
-app.use('/api/timer', timerRoutes);
-app.use('/api/stats', statsRoutes);
+// Mount Auth routes (public)
+app.use('/api/auth', authRoutes);
+
+// Mount API routes (scoped with requireAuth)
+app.use('/api/chat', requireAuth, chatRoutes);
+app.use('/api/subjects', requireAuth, subjectRoutes);
+app.use('/api/assignments', requireAuth, assignmentRoutes);
+app.use('/api/exams', requireAuth, examRoutes);
+app.use('/api/planner', requireAuth, plannerRoutes);
+app.use('/api/quizzes', requireAuth, quizRoutes);
+app.use('/api/flashcards', requireAuth, flashcardRoutes);
+app.use('/api/timer', requireAuth, timerRoutes);
+app.use('/api/stats', requireAuth, statsRoutes);
 app.use('/api/agents', agentRoutes);
 
 // Health check endpoint

@@ -1,13 +1,29 @@
 const API_BASE = '/api';
 
+export function getAuthToken() {
+  return localStorage.getItem('studypilot_token');
+}
+
+export function setAuthToken(token) {
+  if (token) {
+    localStorage.setItem('studypilot_token', token);
+  } else {
+    localStorage.removeItem('studypilot_token');
+  }
+}
+
 export async function fetchJson(endpoint, options = {}) {
   try {
+    const token = getAuthToken();
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      ...(options.headers || {})
+    };
+
     const res = await fetch(`${API_BASE}${endpoint}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(options.headers || {})
-      },
-      ...options
+      ...options,
+      headers
     });
 
     const data = await res.json();
@@ -20,6 +36,22 @@ export async function fetchJson(endpoint, options = {}) {
     throw error;
   }
 }
+
+// Authentication API
+export const apiAuth = {
+  login: (credentials) =>
+    fetchJson('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(credentials)
+    }),
+  register: (userData) =>
+    fetchJson('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(userData)
+    }),
+  getMe: () => fetchJson('/auth/me'),
+  getAccounts: () => fetchJson('/auth/accounts')
+};
 
 // Chat API
 export const apiChat = {

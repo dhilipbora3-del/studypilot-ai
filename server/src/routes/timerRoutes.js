@@ -3,9 +3,10 @@ import { db } from '../db/database.js';
 
 const router = Router();
 
-// GET /api/timer/sessions - Retrieve recent study sessions
+// GET /api/timer/sessions - Retrieve recent study sessions for current user
 router.get('/sessions', (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const sessions = db.prepare(`
       SELECT 
         ss.*,
@@ -13,16 +14,17 @@ router.get('/sessions', (req, res) => {
         s.color as subject_color
       FROM study_sessions ss
       LEFT JOIN subjects s ON ss.subject_id = s.id
+      WHERE ss.user_id = ?
       ORDER BY ss.completed_at DESC
       LIMIT 30
-    `).all();
+    `).all(userId);
 
     const todayStr = new Date().toISOString().split('T')[0];
     const todayMinutes = db.prepare(`
       SELECT SUM(duration_minutes) as total
       FROM study_sessions
-      WHERE completed_at LIKE ?
-    `).get(`${todayStr}%`).total || 0;
+      WHERE user_id = ? AND completed_at LIKE ?
+    `).get(userId, `${todayStr}%`).total || 0;
 
     res.json({ success: true, sessions, todayMinutes });
   } catch (error) {
@@ -33,6 +35,7 @@ router.get('/sessions', (req, res) => {
 // POST /api/timer/log - Record completed study session
 router.post('/log', (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { subject_id, duration_minutes, mode = 'pomodoro', notes = '' } = req.body;
 
     if (!duration_minutes || Number(duration_minutes) <= 0) {
@@ -40,9 +43,9 @@ router.post('/log', (req, res) => {
     }
 
     const info = db.prepare(`
-      INSERT INTO study_sessions (subject_id, duration_minutes, mode, notes)
-      VALUES (?, ?, ?, ?)
-    `).run(subject_id ? Number(subject_id) : null, Number(duration_minutes), mode, notes.trim());
+      INSERT INTO study_sessions (user_id, subject_id, duration_minutes, mode, notes)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(userId, subject_id ? Number(subject_id) : null, Number(duration_minutes), mode, notes.trim());
 
     const created = db.prepare(`
       SELECT ss.*, s.name as subject_name, s.color as subject_color

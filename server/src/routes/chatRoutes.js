@@ -4,9 +4,10 @@ import { db } from '../db/database.js';
 
 const router = Router();
 
-// POST /api/chat - Process student request via Multi-Agent system
+// POST /api/chat - Process student request via Multi-Agent system for current user
 router.post('/', async (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { message, dailyStudyHours } = req.body;
 
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
@@ -14,15 +15,16 @@ router.post('/', async (req, res) => {
     }
 
     // Save student message in DB
-    db.prepare('INSERT INTO chat_logs (role, content, agent_traces) VALUES (?, ?, ?)')
-      .run('user', message, '[]');
+    db.prepare('INSERT INTO chat_logs (user_id, role, content, agent_traces) VALUES (?, ?, ?, ?)')
+      .run(userId, 'user', message, '[]');
 
-    // Run Manager Agent orchestration
-    const agentResult = await managerAgent.processRequest(message, { dailyStudyHours });
+    // Run Manager Agent orchestration with user context
+    const agentResult = await managerAgent.processRequest(message, { dailyStudyHours, userId });
 
     // Save assistant response + full agent trace in DB
-    db.prepare('INSERT INTO chat_logs (role, content, agent_traces, metadata) VALUES (?, ?, ?, ?)')
+    db.prepare('INSERT INTO chat_logs (user_id, role, content, agent_traces, metadata) VALUES (?, ?, ?, ?, ?)')
       .run(
+        userId,
         'assistant',
         agentResult.message,
         JSON.stringify(agentResult.agentTraces),
@@ -47,10 +49,11 @@ router.post('/', async (req, res) => {
   }
 });
 
-// GET /api/chat/history - Retrieve recent chat messages
+// GET /api/chat/history - Retrieve recent chat messages for current user
 router.get('/history', (req, res) => {
   try {
-    const rows = db.prepare('SELECT * FROM chat_logs ORDER BY created_at ASC LIMIT 50').all();
+    const userId = req.user?.id || 1;
+    const rows = db.prepare('SELECT * FROM chat_logs WHERE user_id = ? ORDER BY created_at ASC LIMIT 50').all(userId);
     const history = rows.map(r => ({
       id: r.id,
       role: r.role,
@@ -65,10 +68,11 @@ router.get('/history', (req, res) => {
   }
 });
 
-// DELETE /api/chat/history - Clear chat history
+// DELETE /api/chat/history - Clear chat history for current user
 router.delete('/history', (req, res) => {
   try {
-    db.prepare('DELETE FROM chat_logs').run();
+    const userId = req.user?.id || 1;
+    db.prepare('DELETE FROM chat_logs WHERE user_id = ?').run(userId);
     res.json({ success: true, message: 'Chat history cleared' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to clear history', details: error.message });

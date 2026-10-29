@@ -4,9 +4,10 @@ import { tutorAgent } from '../agents/tutorAgent.js';
 
 const router = Router();
 
-// GET /api/flashcards - List all flashcards
+// GET /api/flashcards - List flashcards for current user
 router.get('/', (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { subject_id, dueOnly } = req.query;
     let query = `
       SELECT 
@@ -15,23 +16,19 @@ router.get('/', (req, res) => {
         s.color as subject_color
       FROM flashcards f
       LEFT JOIN subjects s ON f.subject_id = s.id
+      WHERE f.user_id = ?
     `;
-    const params = [];
-    const conditions = [];
+    const params = [userId];
 
     if (subject_id) {
-      conditions.push('f.subject_id = ?');
+      query += ' AND f.subject_id = ?';
       params.push(subject_id);
     }
 
     if (dueOnly === 'true') {
       const today = new Date().toISOString().split('T')[0];
-      conditions.push('(f.next_review_date IS NULL OR f.next_review_date <= ?)');
+      query += ' AND (f.next_review_date IS NULL OR f.next_review_date <= ?)';
       params.push(today);
-    }
-
-    if (conditions.length > 0) {
-      query += ` WHERE ${conditions.join(' AND ')}`;
     }
 
     query += ' ORDER BY f.box ASC, f.created_at DESC';
@@ -43,9 +40,10 @@ router.get('/', (req, res) => {
   }
 });
 
-// POST /api/flashcards - Add a flashcard manually
+// POST /api/flashcards - Add a flashcard
 router.post('/', (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { subject_id, topic, front, back } = req.body;
     if (!front || !back) {
       return res.status(400).json({ error: 'Front and back are required' });
@@ -53,9 +51,9 @@ router.post('/', (req, res) => {
 
     const today = new Date().toISOString().split('T')[0];
     const info = db.prepare(`
-      INSERT INTO flashcards (subject_id, topic, front, back, box, next_review_date, review_count)
-      VALUES (?, ?, ?, ?, 1, ?, 0)
-    `).run(subject_id ? Number(subject_id) : null, topic || 'General', front.trim(), back.trim(), today);
+      INSERT INTO flashcards (user_id, subject_id, topic, front, back, box, next_review_date, review_count)
+      VALUES (?, ?, ?, ?, ?, 1, ?, 0)
+    `).run(userId, subject_id ? Number(subject_id) : null, topic || 'General', front.trim(), back.trim(), today);
 
     const created = db.prepare('SELECT * FROM flashcards WHERE id = ?').get(info.lastInsertRowid);
     res.status(201).json({ success: true, flashcard: created });
@@ -67,25 +65,26 @@ router.post('/', (req, res) => {
 // POST /api/flashcards/generate - Tutor Agent generates cards for a topic
 router.post('/generate', async (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { subject_id, topic, count = 3 } = req.body;
     let subjectName = 'General Studies';
     if (subject_id) {
-      const sub = db.prepare('SELECT name FROM subjects WHERE id = ?').get(subject_id);
+      const sub = db.prepare('SELECT name FROM subjects WHERE id = ? AND user_id = ?').get(subject_id, userId);
       if (sub) subjectName = sub.name;
     }
 
     const result = await tutorAgent.generateFlashcards(topic, Number(count) || 3, { subject: subjectName });
 
     const insertStmt = db.prepare(`
-      INSERT INTO flashcards (subject_id, topic, front, back, box, next_review_date, review_count)
-      VALUES (?, ?, ?, ?, 1, ?, 0)
+      INSERT INTO flashcards (user_id, subject_id, topic, front, back, box, next_review_date, review_count)
+      VALUES (?, ?, ?, ?, ?, 1, ?, 0)
     `);
 
     const today = new Date().toISOString().split('T')[0];
     const savedCards = [];
 
     for (const card of result.cards) {
-      const info = insertStmt.run(subject_id ? Number(subject_id) : null, card.topic || topic, card.front, card.back, today);
+      const info = insertStmt.run(userId, subject_id ? Number(subject_id) : null, card.topic || topic, card.front, card.back, today);
       savedCards.push(db.prepare('SELECT * FROM flashcards WHERE id = ?').get(info.lastInsertRowid));
     }
 
@@ -106,10 +105,11 @@ router.post('/generate', async (req, res) => {
 // PUT /api/flashcards/:id/review - Update spaced repetition interval
 router.put('/:id/review', (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { id } = req.params;
-    const { rating } = req.body; // 'again', 'hard', 'good', 'easy'
+    const { rating } = req.body;
 
-    const card = db.prepare('SELECT * FROM flashcards WHERE id = ?').get(id);
+    const card = db.prepare('SELECT * FROM flashcards WHERE id = ? AND user_id = ?').get(id, userId);
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
     let newBox = card.box || 1;
@@ -118,7 +118,7 @@ router.put('/:id/review', (req, res) => {
     switch (rating) {
       case 'again':
         newBox = 1;
-        daysToAdd = 0; // review same day
+        daysToAdd = 0;
         break;
       case 'hard':
         newBox = Math.max(1, newBox);
@@ -126,7 +126,7 @@ router.put('/:id/review', (req, res) => {
         break;
       case 'good':
         newBox = Math.min(5, newBox + 1);
-        daysToAdd = Math.pow(2, newBox); // 2, 4, 8, 16, 32 days
+        daysToAdd = Math.pow(2, newBox);
         break;
       case 'easy':
         newBox = Math.min(5, newBox + 2);
@@ -142,8 +142,8 @@ router.put('/:id/review', (req, res) => {
     db.prepare(`
       UPDATE flashcards
       SET box = ?, next_review_date = ?, review_count = ?
-      WHERE id = ?
-    `).run(newBox, nextDate, newCount, id);
+      WHERE id = ? AND user_id = ?
+    `).run(newBox, nextDate, newCount, id, userId);
 
     res.json({ success: true, box: newBox, next_review_date: nextDate, review_count: newCount });
   } catch (error) {
@@ -151,11 +151,12 @@ router.put('/:id/review', (req, res) => {
   }
 });
 
-// DELETE /api/flashcards/:id - Delete flashcard
+// DELETE /api/flashcards/:id
 router.delete('/:id', (req, res) => {
   try {
+    const userId = req.user?.id || 1;
     const { id } = req.params;
-    db.prepare('DELETE FROM flashcards WHERE id = ?').run(id);
+    db.prepare('DELETE FROM flashcards WHERE id = ? AND user_id = ?').run(id, userId);
     res.json({ success: true, message: 'Flashcard deleted' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete flashcard', details: error.message });

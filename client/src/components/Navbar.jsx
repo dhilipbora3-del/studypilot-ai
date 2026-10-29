@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Sparkles, 
   Flame, 
@@ -7,16 +7,23 @@ import {
   ShieldCheck, 
   Cpu, 
   Layers,
-  GraduationCap
+  GraduationCap,
+  User,
+  LogOut,
+  ChevronDown
 } from 'lucide-react';
 
 export default function Navbar({ 
   streak = 0, 
   agentStatus, 
+  currentUser,
   onOpenSystemModal, 
+  onOpenAuthModal,
+  onLogout,
   onNavigate, 
   currentTab 
 }) {
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const isLLMActive = agentStatus?.system?.llmActive;
   const providerLabel = agentStatus?.system?.primaryProvider || 'Deterministic Safe Mode';
 
@@ -75,14 +82,46 @@ export default function Navbar({
           <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
         </button>
 
-        {/* Quick Action: Start Focus Timer */}
-        <button
-          onClick={() => onNavigate('timer')}
-          className="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition"
-        >
-          <Timer className="w-3.5 h-3.5 text-indigo-400" />
-          <span>Focus Timer</span>
-        </button>
+        {/* User Account / Profile Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            className="flex items-center space-x-2 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs transition"
+          >
+            <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 text-white font-bold text-[11px] flex items-center justify-center">
+              {currentUser?.name ? currentUser.name.charAt(0) : 'U'}
+            </div>
+            <span className="hidden sm:inline font-semibold text-white max-w-[100px] truncate">
+              {currentUser?.name || 'Account'}
+            </span>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+          </button>
+
+          {showUserMenu && (
+            <div className="absolute right-0 mt-2 w-48 rounded-xl bg-slate-900 border border-slate-800 shadow-xl py-1 text-xs z-50 animate-in fade-in zoom-in-95 duration-100">
+              <div className="px-3.5 py-2 border-b border-slate-800">
+                <span className="font-bold text-white block truncate">{currentUser?.name || 'Student'}</span>
+                <span className="text-[11px] text-slate-400 block truncate">{currentUser?.email || ''}</span>
+              </div>
+
+              <button
+                onClick={() => { setShowUserMenu(false); onOpenAuthModal(); }}
+                className="w-full text-left px-3.5 py-2 hover:bg-slate-800 text-slate-300 hover:text-white transition flex items-center space-x-2"
+              >
+                <User className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Switch / Add Account</span>
+              </button>
+
+              <button
+                onClick={() => { setShowUserMenu(false); onLogout(); }}
+                className="w-full text-left px-3.5 py-2 hover:bg-slate-800 text-rose-400 transition flex items-center space-x-2 border-t border-slate-800"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Log Out</span>
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Quick Action: Ask AI Tutor */}
         <button
@@ -90,7 +129,7 @@ export default function Navbar({
           className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition transform active:scale-95"
         >
           <Sparkles className="w-3.5 h-3.5" />
-          <span>Ask StudyPilot</span>
+          <span className="hidden sm:inline">Ask StudyPilot</span>
         </button>
       </div>
     </header>

@@ -29,7 +29,8 @@ export class ManagerAgent {
 
     // Step 1: Manager Analysis & Intent Decomposition
     const analysisStart = Date.now();
-    const studentContext = this.gatherStudentContext();
+    const userId = options.userId || 1;
+    const studentContext = this.gatherStudentContext(userId);
     const intentPlan = await this.analyzeIntent(userMessage, studentContext);
     
     traces.push({
@@ -215,13 +216,13 @@ export class ManagerAgent {
   }
 
   /**
-   * Pulls live student context from database
+   * Pulls live student context from database for specific user
    */
-  gatherStudentContext() {
+  gatherStudentContext(userId = 1) {
     try {
-      const subjects = db.prepare('SELECT * FROM subjects ORDER BY confidence_level ASC').all();
-      const assignments = db.prepare('SELECT * FROM assignments WHERE status != "completed" ORDER BY due_date ASC LIMIT 5').all();
-      const exams = db.prepare('SELECT * FROM exams ORDER BY exam_date ASC LIMIT 3').all();
+      const subjects = db.prepare('SELECT * FROM subjects WHERE user_id = ? ORDER BY confidence_level ASC').all(userId);
+      const assignments = db.prepare('SELECT * FROM assignments WHERE user_id = ? AND status != "completed" ORDER BY due_date ASC LIMIT 5').all(userId);
+      const exams = db.prepare('SELECT * FROM exams WHERE user_id = ? ORDER BY exam_date ASC LIMIT 3').all(userId);
       return { subjects, assignments, exams };
     } catch (e) {
       return { subjects: [], assignments: [], exams: [] };
