@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+server/node_modules/
+client/node_modules/
+
+# Environment files with sensitive credentials
+.env
+server/.env
+*.env.local
+
+# Build output
+client/dist/
+
+# SQLite temporary and journal files
+server/data/*.db-journal
+server/data/*.db-wal
+server/data/*.db-shm
+
+# System & Editor files
+.DS_Store
+*.log
+.system_generated/

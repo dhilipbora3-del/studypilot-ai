@@ -1,0 +1,22 @@
+{
+  "name": "studypilot-ai",
+  "version": "1.0.0",
+  "description": "StudyPilot AI — Intelligent Multi-Agent Student Assistant",
+  "scripts": {
+    "start": "node server/src/index.js",
+    "server": "cd server && npm start",
+    "client": "cd client && npm run dev",
+    "build": "cd client && npm run build",
+    "test": "node server/test/test-orchestrator.js"
+  },
+  "keywords": [
+    "ai",
+    "multi-agent",
+    "student-productivity",
+    "study-planner",
+    "tutoring",
+    "exams"
+  ],
+  "author": "StudyPilot Team",
+  "license": "MIT"
+}
