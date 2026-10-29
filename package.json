@@ -4,9 +4,9 @@
   "description": "StudyPilot AI — Intelligent Multi-Agent Student Assistant",
   "scripts": {
     "start": "node server/src/index.js",
+    "build": "cd server && npm install && cd ../client && npm install && npm run build",
     "server": "cd server && npm start",
     "client": "cd client && npm run dev",
-    "build": "cd client && npm run build",
     "test": "node server/test/test-orchestrator.js"
   },
   "keywords": [
