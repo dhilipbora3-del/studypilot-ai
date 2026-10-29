@@ -12,12 +12,32 @@ export function setAuthToken(token) {
   }
 }
 
+export function getCustomLLMKey() {
+  return localStorage.getItem('studypilot_llm_key');
+}
+
+export function getCustomLLMProvider() {
+  return localStorage.getItem('studypilot_llm_provider') || 'gemini';
+}
+
+export function setCustomLLMKey(key, provider = 'gemini') {
+  if (key) {
+    localStorage.setItem('studypilot_llm_key', key);
+    localStorage.setItem('studypilot_llm_provider', provider);
+  } else {
+    localStorage.removeItem('studypilot_llm_key');
+    localStorage.removeItem('studypilot_llm_provider');
+  }
+}
+
 export async function fetchJson(endpoint, options = {}) {
   try {
     const token = getAuthToken();
+    const customKey = getCustomLLMKey();
     const headers = {
       'Content-Type': 'application/json',
       ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      ...(customKey ? { 'X-Gemini-Key': customKey } : {}),
       ...(options.headers || {})
     };
 
@@ -55,10 +75,16 @@ export const apiAuth = {
 
 // Chat API
 export const apiChat = {
-  sendMessage: (message, dailyStudyHours) =>
+  sendMessage: (message, dailyStudyHours, selectedAgent = 'auto') =>
     fetchJson('/chat', {
       method: 'POST',
-      body: JSON.stringify({ message, dailyStudyHours })
+      body: JSON.stringify({ 
+        message, 
+        dailyStudyHours, 
+        selectedAgent,
+        apiKey: getCustomLLMKey(),
+        provider: getCustomLLMProvider()
+      })
     }),
   getHistory: () => fetchJson('/chat/history'),
   clearHistory: () => fetchJson('/chat/history', { method: 'DELETE' })
@@ -210,5 +236,10 @@ export const apiStats = {
 
 // Agents API
 export const apiAgents = {
-  getStatus: () => fetchJson('/agents/status')
+  getStatus: () => fetchJson('/agents/status'),
+  testKey: (params) =>
+    fetchJson('/agents/test-key', {
+      method: 'POST',
+      body: JSON.stringify(params)
+    })
 };

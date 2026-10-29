@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { isLLMConfigured } from '../agents/llmClient.js';
+import { isLLMConfigured, testAPIKey } from '../agents/llmClient.js';
 
 const router = Router();
 
@@ -7,6 +7,7 @@ const router = Router();
 router.get('/status', (req, res) => {
   const geminiConfigured = Boolean(process.env.GEMINI_API_KEY);
   const openaiConfigured = Boolean(process.env.OPENAI_API_KEY);
+  const groqConfigured = Boolean(process.env.GROQ_API_KEY);
   const llmActive = isLLMConfigured();
 
   const agents = [
@@ -64,14 +65,30 @@ router.get('/status', (req, res) => {
     success: true,
     system: {
       llmActive,
-      primaryProvider: geminiConfigured ? 'Gemini 1.5/2.0 API' : (openaiConfigured ? 'OpenAI GPT-4o-mini' : 'Deterministic Local Engine (Offline / Safe Mode)'),
+      primaryProvider: geminiConfigured ? 'Gemini 1.5/2.0 API' : (openaiConfigured ? 'OpenAI GPT-4o-mini' : 'Deep Pedagogical Engine (Safe / Offline)'),
       geminiConfigured,
       openaiConfigured,
+      groqConfigured,
       offlineFallbackReady: true,
       agentsCount: agents.length
     },
     agents
   });
+});
+
+// POST /api/agents/test-key - Test user-provided Gemini/OpenAI API key
+router.post('/test-key', async (req, res) => {
+  try {
+    const { apiKey, provider = 'gemini' } = req.body;
+    if (!apiKey) {
+      return res.status(400).json({ error: 'API key is required' });
+    }
+
+    const testRes = await testAPIKey(apiKey.trim(), provider);
+    res.json(testRes);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 export default router;

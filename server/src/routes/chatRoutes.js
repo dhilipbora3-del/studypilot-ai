@@ -8,7 +8,9 @@ const router = Router();
 router.post('/', async (req, res) => {
   try {
     const userId = req.user?.id || 1;
-    const { message, dailyStudyHours } = req.body;
+    const { message, dailyStudyHours, selectedAgent, apiKey, provider } = req.body;
+    const headerKey = req.headers['x-gemini-key'] || req.headers['x-llm-key'];
+    const activeKey = apiKey || headerKey;
 
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return res.status(400).json({ error: 'Message cannot be empty' });
@@ -19,7 +21,13 @@ router.post('/', async (req, res) => {
       .run(userId, 'user', message, '[]');
 
     // Run Manager Agent orchestration with user context
-    const agentResult = await managerAgent.processRequest(message, { dailyStudyHours, userId });
+    const agentResult = await managerAgent.processRequest(message, { 
+      dailyStudyHours, 
+      userId,
+      selectedAgent,
+      apiKey: activeKey,
+      provider
+    });
 
     // Save assistant response + full agent trace in DB
     db.prepare('INSERT INTO chat_logs (user_id, role, content, agent_traces, metadata) VALUES (?, ?, ?, ?, ?)')

@@ -14,21 +14,31 @@ import {
   HelpCircle,
   Clock,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  Key,
+  Award,
+  BookOpen,
+  Sliders,
+  ExternalLink
 } from 'lucide-react';
 import AgentTraceViewer from './AgentTraceViewer';
-import { apiChat, apiFlashcards, apiPlanner, apiAssignments } from '../api';
+import AISettingsModal from './AISettingsModal';
+import { apiChat, apiFlashcards, apiPlanner, getCustomLLMKey, getCustomLLMProvider } from '../api';
 
 export default function ChatStudioView({ initialPrompt = '', onActionCompleted }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState(initialPrompt);
   const [loading, setLoading] = useState(false);
   const [dailyHours, setDailyHours] = useState(4);
+  const [selectedAgent, setSelectedAgent] = useState('auto'); // 'auto', 'tutor', 'planner', 'assignment', 'exam'
   const [importStatus, setImportStatus] = useState({});
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [hasCustomKey, setHasCustomKey] = useState(Boolean(getCustomLLMKey()));
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
     loadChatHistory();
+    setHasCustomKey(Boolean(getCustomLLMKey()));
   }, []);
 
   useEffect(() => {
@@ -51,28 +61,27 @@ export default function ChatStudioView({ initialPrompt = '', onActionCompleted }
       if (data.history && data.history.length > 0) {
         setMessages(data.history);
       } else {
-        // Welcome message from Manager Agent
         setMessages([
           {
             id: 'welcome',
             role: 'assistant',
-            content: `### 👋 Welcome to StudyPilot AI!
-I am your **Manager Agent**, coordinating an autonomous team of 5 specialized agents to help you excel:
-- 💡 **AI Tutor Agent**: Explains concepts with analogies, notes, and worked examples.
-- 📅 **Study Planner Agent**: Schedules conflict-free study plans and rest intervals.
-- 📋 **Assignment Agent**: Deconstructs deadlines and guides problem solving.
-- 🎯 **Exam Agent**: Generates mock tests and identifies weak areas.
-- 🛡️ **Review Agent**: Verifies all calculations, schedules, and dates for 100% accuracy.
+            content: `### 👋 Welcome to StudyPilot Multi-Agent Studio!
+I am your **Manager Agent**, coordinating a synchronized team of 5 specialized agents:
+- 💡 **AI Tutor**: Explains any concept with analogies, step-by-step notes, and worked examples.
+- 📅 **Study Planner**: Optimizes conflict-free timetables with built-in ergonomic breaks.
+- 📋 **Assignment Solver**: Deconstructs deadlines and provides Socratic problem guidance.
+- 🎯 **Exam Specialist**: Prepares diagnostic practice questions and calculates mastery.
+- 🛡️ **Review Agent**: Audits calculations, dates, and schedule collisions before presenting.
 
-How can we assist your studies today? Try asking a question or selecting one of the suggested prompts below!`,
+Select an agent below or leave on **Auto** to let me coordinate the team!`,
             agentTraces: [
               {
                 agent: 'Manager Agent',
                 role: 'System Initialization',
                 status: 'READY',
-                action: 'Initialized multi-agent collaborative workspace',
-                details: 'All 6 agents online and ready for student queries',
-                executionTimeMs: 4
+                action: 'Synchronized all 6 autonomous student agents',
+                details: 'Collaborative pipeline initialized and ready for inquiries',
+                executionTimeMs: 3
               }
             ],
             metadata: {}
@@ -99,7 +108,7 @@ How can we assist your studies today? Try asking a question or selecting one of 
     setLoading(true);
 
     try {
-      const result = await apiChat.sendMessage(query.trim(), dailyHours);
+      const result = await apiChat.sendMessage(query.trim(), dailyHours, selectedAgent);
 
       const assistantMsg = {
         id: Date.now() + 1,
@@ -119,7 +128,7 @@ How can we assist your studies today? Try asking a question or selecting one of 
         {
           id: Date.now() + 1,
           role: 'assistant',
-          content: `⚠️ **Request Notice**: Unable to complete request at this time (${err.message}). The deterministic fallback engine is retaining all current student data safely.`,
+          content: `⚠️ **Request Notice**: Unable to complete request (${err.message}). Your current student workspace is safely preserved.`,
           agentTraces: []
         }
       ]);
@@ -136,7 +145,6 @@ How can we assist your studies today? Try asking a question or selecting one of 
     }
   };
 
-  // Helper to import flashcards directly into student's deck
   const handleSaveFlashcards = async (msgId, cards = []) => {
     try {
       setImportStatus(prev => ({ ...prev, [`fc_${msgId}`]: 'saving' }));
@@ -156,7 +164,6 @@ How can we assist your studies today? Try asking a question or selecting one of 
     }
   };
 
-  // Helper to import schedule slots into timetable
   const handleApplySchedule = async (msgId, slots = []) => {
     try {
       setImportStatus(prev => ({ ...prev, [`slot_${msgId}`]: 'saving' }));
@@ -169,38 +176,46 @@ How can we assist your studies today? Try asking a question or selecting one of 
     }
   };
 
+  const agentsList = [
+    { id: 'auto', label: 'Auto (Manager)', icon: Bot, color: 'text-indigo-400' },
+    { id: 'tutor', label: 'AI Tutor', icon: Sparkles, color: 'text-purple-400' },
+    { id: 'planner', label: 'Study Planner', icon: Calendar, color: 'text-blue-400' },
+    { id: 'assignment', label: 'Assignment Solver', icon: CheckSquare, color: 'text-amber-400' },
+    { id: 'exam', label: 'Exam Specialist', icon: Award, color: 'text-rose-400' }
+  ];
+
   const promptSuggestions = [
-    "Explain Eigenvalues and eigenvectors with an intuitive real-world analogy",
-    "Create a realistic 4-day revision timetable for my Calculus midterm",
-    "Break down my Dynamic Programming assignment into step-by-step milestones",
-    "Generate a 3-question mock test on Classical Mechanics with solutions",
-    "How does Memoization differ from Tabulation in dynamic programming?"
+    "Explain Mitosis vs Meiosis with a simple analogy and practice question",
+    "Explain dynamic programming memoization vs tabulation in Python",
+    "Create a realistic 4-day revision schedule for my Calculus exam",
+    "How do I solve problem sets on Rotational Torque?",
+    "Generate 3 practice test questions on Classical Mechanics"
   ];
 
   return (
     <div className="flex flex-col h-[calc(100vh-5rem)] max-w-5xl mx-auto rounded-2xl bg-slate-900 border border-slate-800 overflow-hidden shadow-2xl">
       {/* Top Studio Controls */}
-      <div className="flex items-center justify-between px-5 py-3 bg-slate-800/80 border-b border-slate-700/80 text-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between px-5 py-3 bg-slate-800/80 border-b border-slate-700/80 gap-2 text-xs">
         <div className="flex items-center space-x-2">
           <Bot className="w-4 h-4 text-indigo-400" />
           <span className="font-bold text-white">StudyPilot Multi-Agent Studio</span>
-          <span className="text-slate-400">• Manager + 5 Autonomous Agents</span>
+          <span className="text-slate-400 hidden md:inline">• 6 Synchronized Autonomous Agents</span>
         </div>
 
-        <div className="flex items-center space-x-3">
-          <div className="flex items-center space-x-1.5 text-slate-400">
-            <span>Daily hours:</span>
-            <select
-              value={dailyHours}
-              onChange={(e) => setDailyHours(Number(e.target.value))}
-              className="bg-slate-900 border border-slate-700 text-slate-200 rounded px-1.5 py-0.5 text-xs focus:outline-none"
-            >
-              <option value={2}>2 hrs</option>
-              <option value={3}>3 hrs</option>
-              <option value={4}>4 hrs</option>
-              <option value={6}>6 hrs</option>
-            </select>
-          </div>
+        <div className="flex items-center space-x-2 sm:space-x-3 self-end sm:self-auto">
+          {/* AI Key & Provider Config Button */}
+          <button
+            onClick={() => setShowSettingsModal(true)}
+            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
+              hasCustomKey
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
+                : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20'
+            }`}
+          >
+            <Key className="w-3.5 h-3.5" />
+            <span>{hasCustomKey ? 'AI Key Connected' : 'Configure AI Key'}</span>
+            <span className={`w-2 h-2 rounded-full ${hasCustomKey ? 'bg-emerald-400 animate-pulse' : 'bg-indigo-400'}`} />
+          </button>
 
           <button
             onClick={handleClearHistory}
@@ -211,6 +226,31 @@ How can we assist your studies today? Try asking a question or selecting one of 
             <span className="hidden sm:inline">Clear</span>
           </button>
         </div>
+      </div>
+
+      {/* Specialist Agent Selector Bar */}
+      <div className="px-4 py-2 bg-slate-950/70 border-b border-slate-800/80 flex items-center space-x-1.5 overflow-x-auto text-xs">
+        <span className="text-slate-500 text-[11px] font-bold uppercase tracking-wider shrink-0 mr-1">
+          Delegate to:
+        </span>
+        {agentsList.map((agent) => {
+          const Icon = agent.icon;
+          const isSelected = selectedAgent === agent.id;
+          return (
+            <button
+              key={agent.id}
+              onClick={() => setSelectedAgent(agent.id)}
+              className={`flex items-center space-x-1 px-3 py-1 rounded-lg shrink-0 transition text-xs font-semibold ${
+                isSelected
+                  ? 'bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-500/40'
+                  : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
+              }`}
+            >
+              <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : agent.color}`} />
+              <span>{agent.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Messages Stream */}
@@ -237,8 +277,8 @@ How can we assist your studies today? Try asking a question or selecting one of 
                     ? 'bg-indigo-600 text-white rounded-tr-none shadow-md shadow-indigo-600/20'
                     : 'bg-slate-800/90 text-slate-200 border border-slate-700/80 rounded-tl-none shadow-lg'
                 }`}>
-                  {/* Message body text */}
-                  <div className="prose prose-invert prose-sm max-w-none space-y-2 whitespace-pre-line font-sans">
+                  {/* Message body text with clean formatting */}
+                  <div className="space-y-2 whitespace-pre-line font-sans leading-relaxed">
                     {msg.content}
                   </div>
 
@@ -248,7 +288,7 @@ How can we assist your studies today? Try asking a question or selecting one of 
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-indigo-300 flex items-center">
                           <Layers className="w-3.5 h-3.5 mr-1" />
-                          Generated Flashcards ({meta.flashcards.length})
+                          Generated Active Recall Cards ({meta.flashcards.length})
                         </span>
                         <button
                           onClick={() => handleSaveFlashcards(msg.id, meta.flashcards)}
@@ -353,12 +393,12 @@ How can we assist your studies today? Try asking a question or selecting one of 
             <div className="p-4 rounded-2xl bg-slate-800/90 border border-slate-700/80 rounded-tl-none space-y-3">
               <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-400">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Manager Agent delegating to specialized agents...</span>
+                <span>Manager Agent delegating to {selectedAgent === 'auto' ? 'specialized agents' : `${selectedAgent} agent`}...</span>
               </div>
               <div className="flex items-center space-x-3 text-[11px] text-slate-400">
                 <span className="flex items-center">
                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 mr-1 animate-pulse" />
-                  Tutor / Planner
+                  Specialist Reasoning
                 </span>
                 <span>→</span>
                 <span className="flex items-center">
@@ -402,7 +442,13 @@ How can we assist your studies today? Try asking a question or selecting one of 
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask AI Tutor, request a study plan, break down an assignment, or practice a quiz..."
+            placeholder={
+              selectedAgent === 'tutor' ? 'Ask AI Tutor to explain any topic or formula...' :
+              selectedAgent === 'planner' ? 'Ask Study Planner to build a timetable...' :
+              selectedAgent === 'assignment' ? 'Ask Assignment Solver to break down homework...' :
+              selectedAgent === 'exam' ? 'Ask Exam Specialist to generate mock tests...' :
+              'Ask StudyPilot AI: Tutor, Planner, Assignment Solver, or Exam Specialist...'
+            }
             disabled={loading}
             className="flex-1 bg-slate-900 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition"
           />
@@ -417,6 +463,13 @@ How can we assist your studies today? Try asking a question or selecting one of 
           </button>
         </form>
       </div>
+
+      {/* AI Key & Model Settings Modal */}
+      <AISettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        onKeyUpdated={() => setHasCustomKey(Boolean(getCustomLLMKey()))}
+      />
     </div>
   );
 }

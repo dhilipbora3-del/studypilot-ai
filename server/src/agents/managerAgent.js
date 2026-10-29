@@ -7,9 +7,9 @@ import { callLLM } from './llmClient.js';
 import { db } from '../db/database.js';
 
 /**
- * Manager Agent
- * Role: Understands the student's request, delegates tasks to relevant agents,
- * passes context between them, coordinates Review Agent validation, and combines results.
+ * Manager Agent (High-Intelligence Orchestrator)
+ * Role: Understands student requests, plans agent workflows, coordinates execution,
+ * verifies results via Review Agent, and synthesizes multi-agent responses.
  */
 
 export class ManagerAgent {
@@ -18,44 +18,41 @@ export class ManagerAgent {
     this.role = 'Task Deconstruction, Agent Orchestration & Result Synthesis';
   }
 
-  /**
-   * Main dispatch method
-   * @param {string} userMessage - Raw message from student
-   * @param {Object} options - Optional overrides or extra parameters
-   */
   async processRequest(userMessage, options = {}) {
     const totalStart = Date.now();
     const traces = [];
+    const userId = options.userId || 1;
+    const apiKey = options.apiKey || null;
+    const provider = options.provider || null;
 
     // Step 1: Manager Analysis & Intent Decomposition
     const analysisStart = Date.now();
-    const userId = options.userId || 1;
     const studentContext = this.gatherStudentContext(userId);
-    const intentPlan = await this.analyzeIntent(userMessage, studentContext);
+    const intentPlan = await this.analyzeIntent(userMessage, studentContext, options.selectedAgent);
     
     traces.push({
       agent: this.name,
       role: this.role,
       status: 'DISPATCHED',
-      action: 'Deconstructed student prompt and selected target agents',
-      details: `Identified intents: [${intentPlan.targetAgents.join(', ')}]. Objective: ${intentPlan.planSummary}`,
+      action: `Deconstructed prompt and delegated to: [${intentPlan.targetAgents.join(', ')}]`,
+      details: `Plan: ${intentPlan.planSummary}`,
       executionTimeMs: Date.now() - analysisStart,
       timestamp: new Date().toISOString()
     });
 
     const subAgentResults = {};
 
-    // Step 2: Invoke designated agents with context
+    // Step 2: Invoke designated agents with user context & optional API key
     for (const agentType of intentPlan.targetAgents) {
       if (agentType === 'tutor') {
-        const res = await tutorAgent.execute(userMessage, { studentContext });
+        const res = await tutorAgent.execute(userMessage, { studentContext, apiKey, provider });
         subAgentResults.tutor = res;
         traces.push({
           agent: tutorAgent.name,
           role: tutorAgent.role,
           status: 'COMPLETED',
-          action: 'Generated conceptual explanation, examples, and study notes',
-          details: `Output generated using ${res.provider} in ${res.executionTimeMs}ms`,
+          action: 'Formulated intuitive conceptual breakdown and worked examples',
+          details: `Generated using ${res.provider} in ${res.executionTimeMs}ms`,
           executionTimeMs: res.executionTimeMs,
           timestamp: new Date().toISOString()
         });
@@ -68,14 +65,16 @@ export class ManagerAgent {
           dailyStudyHours: options.dailyStudyHours || 4,
           subjects: studentContext.subjects,
           assignments: studentContext.assignments,
-          exams: studentContext.exams
+          exams: studentContext.exams,
+          apiKey,
+          provider
         });
         subAgentResults.planner = res;
         traces.push({
           agent: plannerAgent.name,
           role: plannerAgent.role,
           status: 'COMPLETED',
-          action: 'Calculated optimal study blocks and rest intervals',
+          action: 'Computed optimal study blocks and rest intervals',
           details: `Allocated ${res.slots.length} conflict-free study and break slots across ${days} day(s)`,
           executionTimeMs: res.executionTimeMs,
           timestamp: new Date().toISOString()
@@ -83,17 +82,18 @@ export class ManagerAgent {
       }
 
       if (agentType === 'assignment') {
-        // If query mentions breakdown or a specific assignment
         const res = await assignmentAgent.guideProblem(userMessage, {
-          subject: studentContext.subjects[0]?.name
+          subject: studentContext.subjects[0]?.name,
+          apiKey,
+          provider
         });
         subAgentResults.assignment = res;
         traces.push({
           agent: assignmentAgent.name,
           role: assignmentAgent.role,
           status: 'COMPLETED',
-          action: 'Formulated step-by-step problem-solving strategy',
-          details: `Constructed pedagogical problem framework in ${res.executionTimeMs}ms`,
+          action: 'Constructed step-by-step problem-solving strategy',
+          details: `Pedagogical breakdown completed in ${res.executionTimeMs}ms`,
           executionTimeMs: res.executionTimeMs,
           timestamp: new Date().toISOString()
         });
@@ -108,14 +108,16 @@ export class ManagerAgent {
         const res = await examAgent.generateMockTest({
           subjectName: targetSubject?.name || 'Academic Studies',
           topic: userMessage,
-          count: 3
+          count: 3,
+          apiKey,
+          provider
         });
         subAgentResults.exam = res;
         traces.push({
           agent: examAgent.name,
           role: examAgent.role,
           status: 'COMPLETED',
-          action: 'Constructed mock exam questions with detailed explanations',
+          action: 'Constructed mock exam questions with explanations',
           details: `Generated ${res.questions.length} diagnostic practice questions in ${res.executionTimeMs}ms`,
           executionTimeMs: res.executionTimeMs,
           timestamp: new Date().toISOString()
@@ -141,7 +143,7 @@ export class ManagerAgent {
       agent: reviewAgent.name,
       role: reviewAgent.role,
       status: reviewResult.verified ? 'VERIFIED' : 'FLAGGED_ADVISORY',
-      action: 'Verified mathematical computations, timetable collisions, and deadline validity',
+      action: 'Audited computations, timeline integrity, and schedule collisions',
       details: reviewResult.summary,
       checks: reviewResult.checks,
       warnings: reviewResult.warnings,
@@ -149,7 +151,7 @@ export class ManagerAgent {
       timestamp: new Date().toISOString()
     });
 
-    // Step 4: Manager Agent Result Synthesis
+    // Step 4: Synthesize Output
     const synthesizedResult = this.synthesizeOutput({
       userMessage,
       intentPlan,
@@ -170,35 +172,35 @@ export class ManagerAgent {
     };
   }
 
-  /**
-   * Deterministic + LLM-assisted intent classification
-   */
-  async analyzeIntent(userMessage, studentContext) {
+  async analyzeIntent(userMessage, studentContext, explicitAgent = null) {
+    if (explicitAgent && explicitAgent !== 'auto') {
+      return {
+        targetAgents: [explicitAgent],
+        planSummary: `Direct routing to specialist: ${explicitAgent} Agent`
+      };
+    }
+
     const text = userMessage.toLowerCase();
     const agents = new Set();
 
-    // Check keywords for planner
     if (text.includes('plan') || text.includes('schedule') || text.includes('timetable') || 
         text.includes('routine') || text.includes('calendar') || text.includes('study hours') ||
-        text.includes('today') || text.includes('week')) {
+        text.includes('today') || text.includes('week') || text.includes('time')) {
       agents.add('planner');
     }
 
-    // Check keywords for assignments
     if (text.includes('assignment') || text.includes('homework') || text.includes('lab') ||
         text.includes('deadline') || text.includes('submit') || text.includes('problem set') ||
         text.includes('break down') || text.includes('solve')) {
       agents.add('assignment');
     }
 
-    // Check keywords for exams & quizzes
     if (text.includes('exam') || text.includes('test') || text.includes('quiz') ||
         text.includes('mock') || text.includes('practice question') || text.includes('midterm') ||
         text.includes('revision') || text.includes('score')) {
       agents.add('exam');
     }
 
-    // Check keywords for tutoring / explanations
     if (text.includes('explain') || text.includes('what is') || text.includes('how does') ||
         text.includes('why') || text.includes('concept') || text.includes('notes') ||
         text.includes('flashcard') || text.includes('analogy') || text.includes('teach me') ||
@@ -215,9 +217,6 @@ export class ManagerAgent {
     };
   }
 
-  /**
-   * Pulls live student context from database for specific user
-   */
   gatherStudentContext(userId = 1) {
     try {
       const subjects = db.prepare('SELECT * FROM subjects WHERE user_id = ? ORDER BY confidence_level ASC').all(userId);
@@ -229,9 +228,6 @@ export class ManagerAgent {
     }
   }
 
-  /**
-   * Combines all sub-agent outputs into a coherent student-facing response
-   */
   synthesizeOutput({ userMessage, intentPlan, subAgentResults, reviewResult, studentContext }) {
     let text = '';
     const structuredData = {};
@@ -266,7 +262,6 @@ export class ManagerAgent {
       structuredData.quizQuestions = subAgentResults.exam.questions;
     }
 
-    // Add Review Agent Verification Stamp
     text += `---\n`;
     if (reviewResult.verified) {
       text += `🛡️ **Review Agent Stamp: Verified** — All mathematical computations, schedule timeblocks, and deadline sequences checked and approved.`;
