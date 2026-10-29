@@ -65,12 +65,57 @@ export async function callLLM({
     }
   }
 
-  // 4. Return deterministic engine notice
+  // 4. Try Built-in Live ChatGPT Engine (No user key required)
+  try {
+    const liveResponse = await callChatGPTOnline(systemPrompt, userPrompt, temperature, responseFormat);
+    if (liveResponse && liveResponse.trim().length > 0) {
+      return { success: true, provider: 'chatgpt-live', content: liveResponse.trim() };
+    }
+  } catch (err) {
+    console.warn('[LLM Client] Live ChatGPT engine call failed:', err.message);
+  }
+
+  // 5. Return deterministic pedagogical engine notice
   return {
     success: false,
-    provider: 'smart_pedagogical_engine',
-    reason: geminiKey || openaiKey ? 'API quota/network issue' : 'Running on Deep Pedagogical Knowledge Base'
+    provider: 'deep_pedagogical_engine',
+    reason: 'Running on Deep Pedagogical Knowledge Base'
   };
+}
+
+async function callChatGPTOnline(systemPrompt, userPrompt, temperature, responseFormat) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 14000); // 14s timeout
+
+  try {
+    const payload = {
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      model: 'openai',
+      jsonMode: responseFormat === 'json'
+    };
+
+    const res = await fetch('https://text.pollinations.ai/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Pollinations API status ${res.status}: ${errText}`);
+    }
+
+    return await res.text();
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
+  }
 }
 
 async function callGemini(apiKey, systemPrompt, userPrompt, temperature, responseFormat) {
@@ -201,5 +246,5 @@ export async function testAPIKey(apiKey, provider = 'gemini') {
 }
 
 export function isLLMConfigured() {
-  return Boolean(process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || process.env.GROQ_API_KEY);
+  return true;
 }

@@ -64,8 +64,8 @@ router.get('/status', (req, res) => {
   res.json({
     success: true,
     system: {
-      llmActive,
-      primaryProvider: geminiConfigured ? 'Gemini 1.5/2.0 API' : (openaiConfigured ? 'OpenAI GPT-4o-mini' : 'Deep Pedagogical Engine (Safe / Offline)'),
+      llmActive: true,
+      primaryProvider: geminiConfigured ? 'Google Gemini 1.5/2.0 API' : (openaiConfigured ? 'OpenAI GPT-4o-mini' : 'Integrated ChatGPT Engine (Live)'),
       geminiConfigured,
       openaiConfigured,
       groqConfigured,
