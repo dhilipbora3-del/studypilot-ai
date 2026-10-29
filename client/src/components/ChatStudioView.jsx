@@ -253,6 +253,24 @@ Select an agent below or leave on **Auto** to let me coordinate the team!`,
         })}
       </div>
 
+      {/* Optional Free AI Key Notice */}
+      {!hasCustomKey && (
+        <div className="px-4 py-2 bg-indigo-950/40 border-b border-indigo-500/20 flex items-center justify-between text-[11px] text-indigo-200">
+          <div className="flex items-center space-x-1.5 truncate mr-2">
+            <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+            <span className="truncate">
+              <strong>Want unlimited live AI reasoning?</strong> Connect a free Google Gemini key (15s setup, 100% free) for real-time explanations on any textbook or paper.
+            </span>
+          </div>
+          <button
+            onClick={() => setShowSettingsModal(true)}
+            className="px-2.5 py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shrink-0 transition text-[11px]"
+          >
+            Connect Free Key
+          </button>
+        </div>
+      )}
+
       {/* Messages Stream */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
         {messages.map((msg, index) => {
