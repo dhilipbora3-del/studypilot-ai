@@ -34,10 +34,15 @@ export async function fetchJson(endpoint, options = {}) {
   try {
     const token = getAuthToken();
     const customKey = getCustomLLMKey();
+    const customProvider = getCustomLLMProvider();
     const headers = {
       'Content-Type': 'application/json',
       ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-      ...(customKey ? { 'X-Gemini-Key': customKey } : {}),
+      ...(customKey ? { 
+        'X-Gemini-Key': customKey,
+        'X-LLM-Key': customKey,
+        'X-LLM-Provider': customProvider 
+      } : {}),
       ...(options.headers || {})
     };
 
@@ -69,8 +74,7 @@ export const apiAuth = {
       method: 'POST',
       body: JSON.stringify(userData)
     }),
-  getMe: () => fetchJson('/auth/me'),
-  getAccounts: () => fetchJson('/auth/accounts')
+  getMe: () => fetchJson('/auth/me')
 };
 
 // Chat API

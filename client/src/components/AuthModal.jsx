@@ -6,12 +6,9 @@ import {
   Mail, 
   LogIn, 
   UserPlus, 
-  Users, 
-  CheckCircle2, 
-  AlertCircle,
   GraduationCap,
-  Sparkles,
-  ArrowRight
+  AlertCircle,
+  ShieldCheck
 } from 'lucide-react';
 import { apiAuth, setAuthToken } from '../api';
 
@@ -22,23 +19,15 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, currentUser 
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [availableAccounts, setAvailableAccounts] = useState([]);
 
   useEffect(() => {
     if (isOpen) {
-      loadAccounts();
       setError(null);
+      setName('');
+      setEmail('');
+      setPassword('');
     }
   }, [isOpen]);
-
-  const loadAccounts = async () => {
-    try {
-      const res = await apiAuth.getAccounts();
-      setAvailableAccounts(res.accounts || []);
-    } catch (e) {
-      console.error(e);
-    }
-  };
 
   if (!isOpen) return null;
 
@@ -67,13 +56,6 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, currentUser 
     }
   };
 
-  const handleQuickSwitch = async (accountEmail) => {
-    // Quick switch with default demo password or prompt
-    setEmail(accountEmail);
-    setPassword('password123');
-    setTab('login');
-  };
-
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
       <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
@@ -85,7 +67,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, currentUser 
             </div>
             <div>
               <h2 className="text-base font-bold text-white">Student Account</h2>
-              <p className="text-xs text-slate-400">Separate workspaces for individual persons</p>
+              <p className="text-xs text-slate-400">Private, secure student workspace</p>
             </div>
           </div>
 
@@ -101,7 +83,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, currentUser 
         <div className="flex border-b border-slate-800 bg-slate-950/50 p-1 text-xs">
           <button
             onClick={() => { setTab('login'); setError(null); }}
-            className={`flex-1 py-2 font-bold rounded-lg transition flex items-center justify-center space-x-1.5 ${
+            className={`flex-1 py-2.5 font-bold rounded-lg transition flex items-center justify-center space-x-1.5 ${
               tab === 'login' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -110,7 +92,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, currentUser 
           </button>
           <button
             onClick={() => { setTab('register'); setError(null); }}
-            className={`flex-1 py-2 font-bold rounded-lg transition flex items-center justify-center space-x-1.5 ${
+            className={`flex-1 py-2.5 font-bold rounded-lg transition flex items-center justify-center space-x-1.5 ${
               tab === 'register' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -131,7 +113,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, currentUser 
           <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
             {tab === 'register' && (
               <div>
-                <label className="block text-slate-300 mb-1 font-medium">Your Full Name</label>
+                <label className="block text-slate-300 mb-1 font-medium">Your Name</label>
                 <div className="relative">
                   <User className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
                   <input
@@ -139,7 +121,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, currentUser 
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Sarah Connor"
+                    placeholder="Enter your name"
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500"
                   />
                 </div>
@@ -155,7 +137,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, currentUser 
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="student@university.edu"
+                  placeholder="yourname@domain.com"
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>
@@ -185,46 +167,11 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, currentUser 
             </button>
           </form>
 
-          {/* Quick Switch Existing Accounts List */}
-          {availableAccounts.length > 0 && (
-            <div className="pt-3 border-t border-slate-800 space-y-2">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                Existing Accounts on this system
-              </span>
-              <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                {availableAccounts.map((acc) => {
-                  const isCurrent = currentUser?.id === acc.id;
-                  return (
-                    <div
-                      key={acc.id}
-                      onClick={() => handleQuickSwitch(acc.email)}
-                      className={`flex items-center justify-between p-2 rounded-xl border cursor-pointer transition text-xs ${
-                        isCurrent
-                          ? 'bg-indigo-950/40 border-indigo-500/50 text-indigo-200'
-                          : 'bg-slate-800/60 border-slate-700 hover:border-slate-600 text-slate-300'
-                      }`}
-                    >
-                      <div className="flex items-center space-x-2">
-                        <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center font-bold text-[10px] text-white">
-                          {acc.name.charAt(0)}
-                        </div>
-                        <div>
-                          <span className="font-semibold text-white block text-[11px]">{acc.name}</span>
-                          <span className="text-[10px] text-slate-400">{acc.email}</span>
-                        </div>
-                      </div>
-
-                      {isCurrent ? (
-                        <span className="text-[10px] font-bold text-emerald-400">Active</span>
-                      ) : (
-                        <ArrowRight className="w-3.5 h-3.5 text-slate-500" />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          {/* Privacy Guarantee Notice */}
+          <div className="pt-2 text-center text-[11px] text-slate-500 flex items-center justify-center space-x-1">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>End-to-end data isolation: your study data is completely private.</span>
+          </div>
         </div>
       </div>
     </div>

@@ -89,14 +89,4 @@ router.get('/me', requireAuth, (req, res) => {
   });
 });
 
-// GET /api/auth/accounts - List available accounts for quick switching
-router.get('/accounts', (req, res) => {
-  try {
-    const users = db.prepare('SELECT id, name, email, avatar, created_at FROM users ORDER BY id ASC').all();
-    res.json({ success: true, accounts: users });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch accounts' });
-  }
-});
-
 export default router;

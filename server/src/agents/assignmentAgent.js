@@ -31,7 +31,7 @@ export class AssignmentAgent {
   /**
    * Breaks an assignment down into progressive actionable subtasks
    */
-  async breakdownAssignment(assignment) {
+  async breakdownAssignment(assignment, options = {}) {
     const startTime = Date.now();
     const systemPrompt = `You are the Assignment Agent in StudyPilot AI.
 Your role is to break down a student's assignment into 3 to 5 realistic, sequential actionable milestones.
@@ -45,7 +45,9 @@ Estimated Time: ${assignment.estimated_minutes || 90} minutes.`;
       systemPrompt,
       userPrompt,
       responseFormat: 'json',
-      temperature: 0.3
+      temperature: 0.3,
+      apiKey: options.apiKey,
+      provider: options.provider
     });
 
     let subtasks = [];
@@ -96,7 +98,9 @@ Subject Context: ${context.subject || 'General'}`;
     const llmResult = await callLLM({
       systemPrompt,
       userPrompt,
-      temperature: 0.3
+      temperature: 0.3,
+      apiKey: context.apiKey,
+      provider: context.provider
     });
 
     let guidance;

@@ -73,7 +73,10 @@ router.post('/generate', async (req, res) => {
       if (sub) subjectName = sub.name;
     }
 
-    const result = await tutorAgent.generateFlashcards(topic, Number(count) || 3, { subject: subjectName });
+    const apiKey = req.headers['x-gemini-key'] || req.headers['x-llm-key'] || req.body.apiKey;
+    const provider = req.headers['x-llm-provider'] || req.body.provider;
+
+    const result = await tutorAgent.generateFlashcards(topic, Number(count) || 3, { subject: subjectName, apiKey, provider });
 
     const insertStmt = db.prepare(`
       INSERT INTO flashcards (user_id, subject_id, topic, front, back, box, next_review_date, review_count)

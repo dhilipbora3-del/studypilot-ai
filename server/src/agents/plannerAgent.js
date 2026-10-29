@@ -60,7 +60,13 @@ Pending Assignments: ${JSON.stringify(assignments.map(a => ({ title: a.title, du
 Upcoming Exams: ${JSON.stringify(exams.map(e => ({ title: e.title, date: e.exam_date })))}`;
 
     let llmNotes = null;
-    const llmResult = await callLLM({ systemPrompt, userPrompt, temperature: 0.3 });
+    const llmResult = await callLLM({ 
+      systemPrompt, 
+      userPrompt, 
+      temperature: 0.3,
+      apiKey: params.apiKey,
+      provider: params.provider
+    });
     if (llmResult.success) {
       llmNotes = llmResult.content;
     }
@@ -73,7 +79,11 @@ Upcoming Exams: ${JSON.stringify(exams.map(e => ({ title: e.title, date: e.exam_
       startHour,
       preferredBlockMinutes,
       breakMinutes,
-      subjects,
+      subjects: subjects?.length > 0 ? subjects : [
+        { id: null, name: 'Core Academic Study', color: 'indigo', confidence_level: 2 },
+        { id: null, name: 'Problem Sets & Practice', color: 'purple', confidence_level: 2 },
+        { id: null, name: 'Active Recall & Review', color: 'blue', confidence_level: 3 }
+      ],
       assignments,
       exams
     });

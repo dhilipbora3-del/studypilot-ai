@@ -19,12 +19,17 @@ export async function callLLM({
   apiKey = null,
   provider = null
 }) {
-  const geminiKey = apiKey || process.env.GEMINI_API_KEY;
-  const openaiKey = (provider === 'openai' ? apiKey : null) || process.env.OPENAI_API_KEY;
-  const groqKey = (provider === 'groq' ? apiKey : null) || process.env.GROQ_API_KEY;
+  const cleanKey = apiKey ? apiKey.trim() : null;
+  const isExplicitOpenAI = provider === 'openai' || (cleanKey && cleanKey.startsWith('sk-'));
+  const isExplicitGroq = provider === 'groq' || (cleanKey && cleanKey.startsWith('gsk_'));
+  const isGemini = !isExplicitOpenAI && !isExplicitGroq;
+
+  const geminiKey = (isGemini ? cleanKey : null) || process.env.GEMINI_API_KEY;
+  const openaiKey = (isExplicitOpenAI ? cleanKey : null) || process.env.OPENAI_API_KEY;
+  const groqKey = (isExplicitGroq ? cleanKey : null) || process.env.GROQ_API_KEY;
 
   // 1. Try Gemini
-  if (geminiKey && geminiKey.startsWith('AIza')) {
+  if (geminiKey) {
     try {
       const response = await callGemini(geminiKey, systemPrompt, userPrompt, temperature, responseFormat);
       return { success: true, provider: 'gemini-1.5-flash', content: response };
@@ -41,7 +46,7 @@ export async function callLLM({
   }
 
   // 2. Try OpenAI
-  if (openaiKey && openaiKey.startsWith('sk-')) {
+  if (openaiKey) {
     try {
       const response = await callOpenAI(openaiKey, systemPrompt, userPrompt, temperature, responseFormat);
       return { success: true, provider: 'gpt-4o-mini', content: response };
@@ -173,14 +178,23 @@ async function callGroq(apiKey, systemPrompt, userPrompt, temperature, responseF
 
 export async function testAPIKey(apiKey, provider = 'gemini') {
   try {
-    if (provider === 'gemini') {
-      const res = await callGemini(apiKey, 'You are a test agent.', 'Reply with OK', 0.1, 'text');
-      return { success: true, message: 'Gemini API Key is valid and responsive!', provider: 'Google Gemini' };
-    } else if (provider === 'openai') {
-      const res = await callOpenAI(apiKey, 'You are a test agent.', 'Reply with OK', 0.1, 'text');
-      return { success: true, message: 'OpenAI API Key is valid!', provider: 'OpenAI' };
+    const cleanKey = apiKey ? apiKey.trim() : '';
+    if (provider === 'gemini' || cleanKey.startsWith('AIza')) {
+      try {
+        await callGeminiModel(cleanKey, 'gemini-1.5-flash', 'You are a test agent.', 'Reply with OK', 0.1, 'text');
+        return { success: true, message: 'Google Gemini 1.5 Flash connected and verified!', provider: 'gemini-1.5-flash' };
+      } catch (e1) {
+        await callGeminiModel(cleanKey, 'gemini-2.0-flash', 'You are a test agent.', 'Reply with OK', 0.1, 'text');
+        return { success: true, message: 'Google Gemini 2.0 Flash connected and verified!', provider: 'gemini-2.0-flash' };
+      }
+    } else if (provider === 'openai' || cleanKey.startsWith('sk-')) {
+      await callOpenAI(cleanKey, 'You are a test agent.', 'Reply with OK', 0.1, 'text');
+      return { success: true, message: 'OpenAI GPT-4o-mini connected and verified!', provider: 'gpt-4o-mini' };
+    } else if (provider === 'groq' || cleanKey.startsWith('gsk_')) {
+      await callGroq(cleanKey, 'You are a test agent.', 'Reply with OK', 0.1, 'text');
+      return { success: true, message: 'Groq LLaMA 3.3 connected and verified!', provider: 'groq-llama3.3' };
     }
-    return { success: false, message: 'Unknown provider' };
+    return { success: false, message: 'Unknown provider specified' };
   } catch (err) {
     return { success: false, message: err.message };
   }
