@@ -15,7 +15,8 @@ import {
   Layers,
   ArrowRight,
   HelpCircle,
-  Loader2
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { apiAssignments, apiSubjects } from '../api';
 
@@ -24,6 +25,7 @@ export default function AssignmentsView({ onGuideProblem }) {
   const [subjects, setSubjects] = useState([]);
   const [filter, setFilter] = useState('all'); // 'all', 'pending', 'urgent', 'completed'
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [breakingDownId, setBreakingDownId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -39,9 +41,23 @@ export default function AssignmentsView({ onGuideProblem }) {
     loadData();
   }, []);
 
+  // Escape key handler for dialogs
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && showAddModal) {
+        setShowAddModal(false);
+      }
+    };
+    if (showAddModal) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showAddModal]);
+
   const loadData = async () => {
     try {
       setLoading(true);
+      setError(null);
       const [assignRes, subRes] = await Promise.all([
         apiAssignments.getAll(),
         apiSubjects.getAll()
@@ -53,6 +69,7 @@ export default function AssignmentsView({ onGuideProblem }) {
       }
     } catch (e) {
       console.error(e);
+      setError('Unable to load assignments from server. Please retry.');
     } finally {
       setLoading(false);
     }
@@ -71,6 +88,7 @@ export default function AssignmentsView({ onGuideProblem }) {
         estimated_minutes: estimatedMinutes,
         autoBreakdown
       });
+      // Only clear form values on success
       setShowAddModal(false);
       setTitle('');
       setDescription('');
@@ -78,6 +96,7 @@ export default function AssignmentsView({ onGuideProblem }) {
       loadData();
     } catch (e) {
       alert('Failed to create assignment: ' + e.message);
+      // Preserves form values on recoverable error
     }
   };
 
@@ -102,9 +121,10 @@ export default function AssignmentsView({ onGuideProblem }) {
     }
   };
 
-  const handleDeleteAssignment = async (id) => {
-    if (confirm('Delete this assignment?')) {
-      await apiAssignments.delete(id);
+  const handleDeleteAssignment = async (a) => {
+    if (!a) return;
+    if (window.confirm(`Delete assignment "${a.title}"?`)) {
+      await apiAssignments.delete(a.id);
       loadData();
     }
   };
@@ -118,30 +138,36 @@ export default function AssignmentsView({ onGuideProblem }) {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Top Controls */}
+      {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-extrabold text-white flex items-center">
             <CheckSquare className="w-6 h-6 text-indigo-400 mr-2.5" />
-            Assignments & Guided Solver
+            Assignment Tracking & Guidance
           </h1>
           <p className="text-xs text-slate-400">
-            Automated priority scoring by Assignment Agent with step-by-step problem breakdown.
+            Autonomous milestone decomposition and Socratic problem-solving support.
           </p>
         </div>
 
-        <div className="flex items-center space-x-2 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           {/* Filters */}
-          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-1 text-xs">
+          <div 
+            role="group"
+            aria-label="Assignment status filter"
+            className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-1 text-xs"
+          >
             {['all', 'pending', 'urgent', 'completed'].map((f) => (
               <button
                 key={f}
+                type="button"
                 onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 rounded-lg capitalize font-medium transition ${
+                className={`min-h-[44px] sm:min-h-[32px] px-3 py-1.5 rounded-lg capitalize font-medium transition ${
                   filter === f
                     ? 'bg-indigo-600 text-white shadow-sm'
                     : 'text-slate-400 hover:text-white'
                 }`}
+                aria-pressed={filter === f}
               >
                 {f}
               </button>
@@ -149,8 +175,10 @@ export default function AssignmentsView({ onGuideProblem }) {
           </div>
 
           <button
+            type="button"
             onClick={() => setShowAddModal(true)}
-            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition"
+            className="min-h-[44px] flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition"
+            aria-label="Add new assignment"
           >
             <Plus className="w-4 h-4" />
             <span>New Assignment</span>
@@ -158,12 +186,64 @@ export default function AssignmentsView({ onGuideProblem }) {
         </div>
       </div>
 
+      {/* Error Banner */}
+      {error && (
+        <div role="alert" className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+            <span>{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={loadData}
+            className="min-h-[44px] px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold transition text-xs flex items-center space-x-1"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Retry</span>
+          </button>
+        </div>
+      )}
+
       {/* Assignment Cards List */}
       <div className="space-y-4">
-        {filteredAssignments.length === 0 ? (
-          <div className="p-12 text-center rounded-2xl bg-slate-900/60 border border-slate-800 text-slate-400 text-sm">
-            <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2 opacity-80" />
-            <p>No assignments found under the selected filter.</p>
+        {/* Loading skeleton state */}
+        {loading && assignments.length === 0 ? (
+          <div role="status" aria-busy="true" aria-label="Loading assignments..." className="space-y-4 animate-pulse">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
+                <div className="flex justify-between">
+                  <div className="h-4 bg-slate-800 rounded w-1/4" />
+                  <div className="h-4 bg-slate-800 rounded w-1/6" />
+                </div>
+                <div className="h-5 bg-slate-750 rounded w-1/2" />
+                <div className="h-3 bg-slate-800/80 rounded w-3/4" />
+                <div className="pt-3 border-t border-slate-800 flex justify-between">
+                  <div className="h-3 bg-slate-800 rounded w-1/3" />
+                  <div className="h-8 bg-slate-800 rounded w-24" />
+                </div>
+              </div>
+            ))}
+            <span className="sr-only">Loading assignments...</span>
+          </div>
+        ) : !loading && !error && filteredAssignments.length === 0 ? (
+          /* Empty state */
+          <div className="p-14 text-center rounded-2xl bg-slate-900/60 border border-slate-800 text-slate-400 text-sm space-y-3">
+            <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto opacity-80" />
+            <h2 className="text-base font-bold text-white">No assignments found under the selected filter.</h2>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              {filter === 'all'
+                ? 'Create a new assignment to keep track of due dates and AI-generated milestones.'
+                : `You currently have no ${filter} assignments.`}
+            </p>
+            {filter === 'all' && (
+              <button
+                type="button"
+                onClick={() => setShowAddModal(true)}
+                className="min-h-[44px] mt-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30"
+              >
+                Create Assignment
+              </button>
+            )}
           </div>
         ) : (
           filteredAssignments.map((a) => {
@@ -174,18 +254,19 @@ export default function AssignmentsView({ onGuideProblem }) {
             return (
               <div
                 key={a.id}
-                className={`p-5 rounded-2xl border transition shadow-sm ${
+                className={`p-5 rounded-2xl border transition-all ${
                   isCompleted
-                    ? 'bg-slate-950/40 border-slate-800/80 opacity-70'
-                    : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                    ? 'bg-slate-950/60 border-slate-800/80 opacity-75'
+                    : a.priority === 'urgent'
+                    ? 'bg-slate-900/90 border-rose-500/40 shadow-md shadow-rose-950/20'
+                    : 'bg-slate-900/80 border-slate-800 shadow-md'
                 }`}
               >
-                {/* Header row */}
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-3">
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <div className="flex items-center space-x-2">
                       <span className="text-xs font-bold text-indigo-400 font-mono">
-                        {a.subject_name || 'General'}
+                        {a.subject_name || 'General Assignment'}
                       </span>
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                         a.priority === 'urgent' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
@@ -213,7 +294,7 @@ export default function AssignmentsView({ onGuideProblem }) {
                   </div>
 
                   {/* Actions & Due Date */}
-                  <div className="flex items-center space-x-3 shrink-0">
+                  <div className="flex items-center space-x-3 shrink-0 self-end sm:self-auto">
                     <div className="text-right">
                       <div className="flex items-center text-xs font-semibold text-slate-300">
                         <Calendar className="w-3.5 h-3.5 text-indigo-400 mr-1" />
@@ -226,9 +307,11 @@ export default function AssignmentsView({ onGuideProblem }) {
                     </div>
 
                     <button
-                      onClick={() => handleDeleteAssignment(a.id)}
-                      className="p-1.5 text-slate-500 hover:text-rose-400 transition"
-                      title="Delete assignment"
+                      type="button"
+                      onClick={() => handleDeleteAssignment(a)}
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center p-1.5 text-slate-500 hover:text-rose-400 transition"
+                      aria-label={`Delete assignment: ${a.title}`}
+                      title={`Delete assignment: ${a.title}`}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -246,70 +329,77 @@ export default function AssignmentsView({ onGuideProblem }) {
                     <div className="flex items-center space-x-2">
                       {subtasks.length === 0 ? (
                         <button
+                          type="button"
                           onClick={() => handleBreakdownAI(a.id)}
                           disabled={isBreakingDown}
-                          className="flex items-center space-x-1 text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition"
+                          className="min-h-[44px] sm:min-h-[28px] px-3 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 font-semibold transition flex items-center space-x-1 border border-indigo-500/30 text-[11px]"
+                          aria-label={`Break down ${a.title} with AI`}
                         >
                           {isBreakingDown ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Decomposing...</span>
+                            </>
                           ) : (
-                            <Sparkles className="w-3 h-3" />
+                            <>
+                              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                              <span>Decompose with AI</span>
+                            </>
                           )}
-                          <span>AI Breakdown</span>
                         </button>
-                      ) : (
+                      ) : null}
+
+                      {a.description && (
                         <button
-                          onClick={() => handleBreakdownAI(a.id)}
-                          disabled={isBreakingDown}
-                          className="text-[11px] text-slate-400 hover:text-indigo-400 transition"
+                          type="button"
+                          onClick={() => onGuideProblem(`I need step-by-step guidance solving my assignment: "${a.title}". Problem requirements: ${a.description}`)}
+                          className="min-h-[44px] sm:min-h-[28px] px-3 py-1 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 font-semibold transition flex items-center space-x-1 border border-purple-500/30 text-[11px]"
+                          aria-label={`Get step-by-step guidance for ${a.title}`}
                         >
-                          Regenerate steps
+                          <Lightbulb className="w-3.5 h-3.5 text-purple-400" />
+                          <span>Guided Solver</span>
                         </button>
                       )}
-
-                      <button
-                        onClick={() => onGuideProblem(`Guide me step-by-step through solving: "${a.title}" (${a.description})`)}
-                        className="px-2.5 py-1 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 text-xs font-medium border border-indigo-500/20 transition flex items-center space-x-1"
-                      >
-                        <Lightbulb className="w-3 h-3" />
-                        <span>Socratic Problem Guide</span>
-                      </button>
                     </div>
                   </div>
 
-                  {/* Subtask checklist */}
                   {subtasks.length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
-                      {subtasks.map((task) => (
-                        <div
-                          key={task.id}
-                          onClick={() => handleToggleSubtask(a.id, task.id)}
-                          className={`flex items-start space-x-2.5 p-2.5 rounded-xl border cursor-pointer transition ${
-                            task.completed
-                              ? 'bg-slate-950/40 border-slate-800 text-slate-500'
-                              : 'bg-slate-800/60 border-slate-700/60 hover:border-slate-600 text-slate-200'
-                          }`}
-                        >
-                          <div className={`w-4 h-4 rounded mt-0.5 flex items-center justify-center border transition ${
-                            task.completed
-                              ? 'bg-emerald-600 border-emerald-500 text-white'
-                              : 'border-slate-500 hover:border-indigo-400 text-transparent'
-                          }`}>
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                          </div>
-
-                          <div className="text-xs">
-                            <span className={task.completed ? 'line-through text-slate-500' : 'font-medium'}>
-                              {task.title}
-                            </span>
-                            {task.hint && !task.completed && (
-                              <span className="block text-[11px] text-indigo-400/80 mt-0.5">
-                                Tip: {task.hint}
+                    <div className="space-y-2 pt-1">
+                      {subtasks.map((st) => {
+                        const isDone = Boolean(st.is_completed);
+                        return (
+                          <div
+                            key={st.id}
+                            className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition ${
+                              isDone
+                                ? 'bg-slate-950/40 border-slate-800/80 text-slate-500'
+                                : 'bg-slate-850/60 border-slate-700/60 text-slate-200'
+                            }`}
+                          >
+                            <div className="flex items-center space-x-2.5">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleSubtask(a.id, st.id)}
+                                className={`w-4 h-4 rounded flex items-center justify-center border transition ${
+                                  isDone
+                                    ? 'bg-emerald-600 border-emerald-500 text-white'
+                                    : 'border-slate-600 hover:border-indigo-400 text-transparent'
+                                }`}
+                                aria-label={`Toggle milestone: ${st.title}`}
+                              >
+                                <CheckCircle2 className="w-3 h-3 fill-current" />
+                              </button>
+                              <span className={isDone ? 'line-through' : 'font-medium'}>
+                                {st.title}
                               </span>
-                            )}
+                            </div>
+
+                            <span className="text-[11px] text-slate-500 font-mono">
+                              ~{st.estimated_minutes}m
+                            </span>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -321,17 +411,22 @@ export default function AssignmentsView({ onGuideProblem }) {
 
       {/* Add Assignment Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div 
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-assignment-modal-title"
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+        >
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-white flex items-center">
-              <CheckSquare className="w-5 h-5 text-indigo-400 mr-2" />
-              Add Assignment
-            </h3>
+            <h3 id="add-assignment-modal-title" className="text-lg font-bold text-white">Create New Assignment</h3>
 
             <form onSubmit={handleCreateAssignment} className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-slate-300 mb-1 font-medium">Assignment Title</label>
+                <label htmlFor="assignment-title-input" className="block text-slate-300 mb-1 font-medium">
+                  Assignment Title
+                </label>
                 <input
+                  id="assignment-title-input"
                   type="text"
                   required
                   value={title}
@@ -341,10 +436,13 @@ export default function AssignmentsView({ onGuideProblem }) {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 mb-1 font-medium">Subject</label>
+                  <label htmlFor="assignment-subject-select" className="block text-slate-300 mb-1 font-medium">
+                    Subject
+                  </label>
                   <select
+                    id="assignment-subject-select"
                     value={subjectId}
                     onChange={(e) => setSubjectId(e.target.value)}
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500"
@@ -358,8 +456,11 @@ export default function AssignmentsView({ onGuideProblem }) {
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 mb-1 font-medium">Due Date</label>
+                  <label htmlFor="assignment-due-date-input" className="block text-slate-300 mb-1 font-medium">
+                    Due Date
+                  </label>
                   <input
+                    id="assignment-due-date-input"
                     type="date"
                     required
                     value={dueDate}
@@ -370,8 +471,11 @@ export default function AssignmentsView({ onGuideProblem }) {
               </div>
 
               <div>
-                <label className="block text-slate-300 mb-1 font-medium">Description & Specific Problem Prompts</label>
+                <label htmlFor="assignment-desc-input" className="block text-slate-300 mb-1 font-medium">
+                  Description & Specific Problem Prompts
+                </label>
                 <textarea
+                  id="assignment-desc-input"
                   rows={3}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
@@ -381,11 +485,12 @@ export default function AssignmentsView({ onGuideProblem }) {
               </div>
 
               <div className="flex items-center justify-between p-3 rounded-xl bg-slate-800/60 border border-slate-700">
-                <div className="flex items-center space-x-2">
+                <label htmlFor="assignment-autobreakdown-checkbox" className="flex items-center space-x-2 cursor-pointer">
                   <Sparkles className="w-4 h-4 text-indigo-400" />
-                  <span className="text-slate-200 font-medium">Auto-Breakdown with AI</span>
-                </div>
+                  <span className="text-slate-200 font-medium">Auto-Breakdown into Milestones with AI</span>
+                </label>
                 <input
+                  id="assignment-autobreakdown-checkbox"
                   type="checkbox"
                   checked={autoBreakdown}
                   onChange={(e) => setAutoBreakdown(e.target.checked)}
@@ -397,13 +502,13 @@ export default function AssignmentsView({ onGuideProblem }) {
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+                  className="min-h-[44px] px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30"
+                  className="min-h-[44px] px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30"
                 >
                   Create Assignment
                 </button>

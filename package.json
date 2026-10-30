@@ -7,7 +7,7 @@
     "build": "cd server && npm install && cd ../client && npm install && npm run build",
     "server": "cd server && npm start",
     "client": "cd client && npm run dev",
-    "test": "node server/test/test-orchestrator.js"
+    "test": "node server/test/test-orchestrator.js && node server/test/test-audit-fixes.js"
   },
   "keywords": [
     "ai",

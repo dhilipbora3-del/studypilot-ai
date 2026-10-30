@@ -43,7 +43,7 @@ export default function AISettingsModal({ isOpen, onClose, onKeyUpdated }) {
   useEffect(() => {
     if (isOpen) {
       const activeProv = getActiveProvider() || 'chatgpt';
-      setSelectedProvider(activeProv);
+      setSelectedProvider(activeProv === 'offline' ? 'chatgpt' : activeProv);
       setKeys({
         chatgpt: getProviderKey('chatgpt') || '',
         claude: getProviderKey('claude') || '',
@@ -57,6 +57,18 @@ export default function AISettingsModal({ isOpen, onClose, onKeyUpdated }) {
       setTestResult(null);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -171,7 +183,12 @@ export default function AISettingsModal({ isOpen, onClose, onKeyUpdated }) {
   const currentConfig = providersConfig[selectedProvider];
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div 
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="ai-settings-modal-title"
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+    >
       <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-xl w-full shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="p-5 border-b border-slate-800 flex items-center justify-between">
@@ -180,14 +197,16 @@ export default function AISettingsModal({ isOpen, onClose, onKeyUpdated }) {
               <Cpu className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">AI Engine Configuration</h2>
+              <h2 id="ai-settings-modal-title" className="text-base font-bold text-white">AI Engine Configuration</h2>
               <p className="text-xs text-slate-400">Integrated support for ChatGPT, Claude, and Google Gemini</p>
             </div>
           </div>
 
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+            aria-label="Close AI settings dialog"
           >
             <X className="w-4 h-4" />
           </button>
@@ -197,8 +216,8 @@ export default function AISettingsModal({ isOpen, onClose, onKeyUpdated }) {
         <div className="p-5 space-y-4 text-xs">
           {/* Provider Tabs */}
           <div>
-            <label className="block text-slate-300 mb-1.5 font-medium">Select Active AI Provider</label>
-            <div className="grid grid-cols-3 gap-2">
+            <span className="block text-slate-300 mb-1.5 font-medium">Select Active AI Provider</span>
+            <div role="group" aria-label="AI Provider selection" className="grid grid-cols-3 gap-2">
               {Object.entries(providersConfig).map(([id, p]) => {
                 const Icon = p.icon;
                 const isSelected = selectedProvider === id;
@@ -209,11 +228,12 @@ export default function AISettingsModal({ isOpen, onClose, onKeyUpdated }) {
                     key={id}
                     type="button"
                     onClick={() => { setSelectedProvider(id); setTestResult(null); }}
-                    className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between ${
+                    className={`min-h-[44px] p-3 rounded-2xl border text-left transition flex flex-col justify-between ${
                       isSelected
                         ? `bg-slate-800/90 ${p.activeRing} ring-1 text-white shadow-sm`
                         : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700'
                     }`}
+                    aria-pressed={isSelected}
                   >
                     <div className="flex items-center justify-between w-full mb-1">
                       <Icon className={`w-4 h-4 ${isSelected ? 'text-white' : 'text-slate-400'}`} />
@@ -231,10 +251,10 @@ export default function AISettingsModal({ isOpen, onClose, onKeyUpdated }) {
 
           {/* Model Selection for current provider */}
           <div>
-            <label className="block text-slate-300 mb-1.5 font-medium">
+            <span className="block text-slate-300 mb-1.5 font-medium">
               {currentConfig.name} Model
-            </label>
-            <div className="grid grid-cols-2 gap-2">
+            </span>
+            <div role="group" aria-label={`${currentConfig.name} model selection`} className="grid grid-cols-2 gap-2">
               {currentConfig.models.map((m) => {
                 const isSelected = currentModel === m.id;
                 return (
@@ -242,11 +262,12 @@ export default function AISettingsModal({ isOpen, onClose, onKeyUpdated }) {
                     key={m.id}
                     type="button"
                     onClick={() => handleModelChange(m.id)}
-                    className={`p-2.5 rounded-xl border text-left transition ${
+                    className={`min-h-[44px] p-2.5 rounded-xl border text-left transition ${
                       isSelected
                         ? 'bg-indigo-600/20 border-indigo-500 text-white ring-1 ring-indigo-500/50'
                         : 'bg-slate-800/50 border-slate-700/60 text-slate-300 hover:border-slate-600'
                     }`}
+                    aria-pressed={isSelected}
                   >
                     <div className="flex items-center justify-between mb-0.5">
                       <span className="font-bold text-xs text-white">{m.label}</span>
@@ -262,7 +283,7 @@ export default function AISettingsModal({ isOpen, onClose, onKeyUpdated }) {
           {/* API Key Input */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-slate-300 font-medium">
+              <label htmlFor="provider-api-key-input" className="text-slate-300 font-medium">
                 {currentConfig.name} API Key
               </label>
               <a
@@ -277,13 +298,14 @@ export default function AISettingsModal({ isOpen, onClose, onKeyUpdated }) {
             </div>
 
             <div className="relative">
-              <Key className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+              <Key className="w-4 h-4 text-slate-500 absolute left-3 top-3.5" />
               <input
+                id="provider-api-key-input"
                 type="password"
                 value={currentKey}
                 onChange={(e) => handleKeyChange(e.target.value)}
                 placeholder={currentConfig.placeholder}
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 font-mono"
+                className="w-full min-h-[44px] bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 font-mono"
               />
             </div>
             
@@ -331,7 +353,7 @@ export default function AISettingsModal({ isOpen, onClose, onKeyUpdated }) {
             <button
               type="button"
               onClick={handleClear}
-              className="text-slate-400 hover:text-rose-400 transition flex items-center space-x-1"
+              className="min-h-[44px] text-slate-400 hover:text-rose-400 transition flex items-center space-x-1"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Clear Key</span>
@@ -342,7 +364,7 @@ export default function AISettingsModal({ isOpen, onClose, onKeyUpdated }) {
                 type="button"
                 onClick={handleTestKey}
                 disabled={testing || !currentKey.trim()}
-                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 text-xs font-semibold border border-slate-700 transition flex items-center space-x-1"
+                className="min-h-[44px] px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 text-xs font-semibold border border-slate-700 transition flex items-center space-x-1"
               >
                 {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-indigo-400" />}
                 <span>Test Connection</span>
@@ -351,7 +373,7 @@ export default function AISettingsModal({ isOpen, onClose, onKeyUpdated }) {
               <button
                 type="button"
                 onClick={handleSave}
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition"
+                className="min-h-[44px] px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition"
               >
                 Set as Active Model
               </button>

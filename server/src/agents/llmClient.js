@@ -88,7 +88,7 @@ export async function callLLM({
   } catch (err) {
     console.warn(`[LLM Client] Primary ${targetProvider.toUpperCase()} call failed:`, err.message);
 
-    // Live ChatGPT Fallback guarantees real AI output even without an API key
+    // Live ChatGPT Fallback guarantees real AI output even without an API key if relay is responsive
     try {
       const liveText = await callLiveChatGPTRelay(systemPrompt, userPrompt, responseFormat);
       return { 
@@ -105,7 +105,8 @@ export async function callLLM({
   return {
     success: false,
     provider: targetProvider,
-    reason: `Could not connect to ${targetProvider.toUpperCase()}`
+    missingKey: !activeKey,
+    reason: activeKey ? `Could not connect to ${targetProvider.toUpperCase()}` : `API key required for ${targetProvider.toUpperCase()}`
   };
 }
 
@@ -247,69 +248,42 @@ async function callGemini(apiKey, model = 'gemini-1.5-flash', systemPrompt, user
 
 /**
  * High-Speed Live ChatGPT Relay (Zero Key Required)
- * Guaranteed live connection to OpenAI ChatGPT for all students
+ * Fast 6s timeout without long thread blocking
  */
 async function callLiveChatGPTRelay(systemPrompt, userPrompt, responseFormat) {
-  const modelsToTry = ['openai-fast', 'openai'];
-  let lastError = null;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s fast timeout
 
-  for (const modelCandidate of modelsToTry) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
+  try {
+    const payload = {
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      model: 'openai-fast',
+      jsonMode: responseFormat === 'json'
+    };
 
-    try {
-      const payload = {
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        model: modelCandidate,
-        jsonMode: responseFormat === 'json'
-      };
+    const res = await fetch('https://text.pollinations.ai/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
 
-      const res = await fetch('https://text.pollinations.ai/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      });
+    clearTimeout(timeoutId);
 
-      clearTimeout(timeoutId);
-
-      if (res.ok) {
-        const text = await res.text();
-        if (text && text.trim().length > 0) {
-          return text.trim();
-        }
-      } else {
-        const errText = await res.text();
-        // Check if there is a short cool-down window and back off automatically
-        const match = errText.match(/wait (\d+) seconds/i);
-        const waitSec = match ? parseInt(match[1], 10) : null;
-        if (waitSec !== null && waitSec <= 20) {
-          console.log(`[ChatGPT Relay] Shared limit cool-down. Backing off ${waitSec + 1}s before retry...`);
-          await new Promise(resolve => setTimeout(resolve, (waitSec + 1) * 1000));
-          const retryRes = await fetch('https://text.pollinations.ai/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-          if (retryRes.ok) {
-            const retryText = await retryRes.text();
-            if (retryText && retryText.trim().length > 0) {
-              return retryText.trim();
-            }
-          }
-        }
-        lastError = new Error(`Live Relay (${modelCandidate}) status ${res.status}: ${errText}`);
+    if (res.ok) {
+      const text = await res.text();
+      if (text && text.trim().length > 0) {
+        return text.trim();
       }
-    } catch (err) {
-      clearTimeout(timeoutId);
-      lastError = err;
     }
+    throw new Error(`Live Relay status ${res.status}`);
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
   }
-
-  throw lastError || new Error('All live relay attempts failed');
 }
 
 /**
@@ -366,5 +340,11 @@ export async function testAPIKey(apiKey, provider = 'gemini', model = null) {
 }
 
 export function isLLMConfigured() {
-  return true;
+  return Boolean(
+    process.env.GEMINI_API_KEY || 
+    process.env.OPENAI_API_KEY || 
+    process.env.CHATGPT_API_KEY || 
+    process.env.ANTHROPIC_API_KEY || 
+    process.env.CLAUDE_API_KEY
+  );
 }

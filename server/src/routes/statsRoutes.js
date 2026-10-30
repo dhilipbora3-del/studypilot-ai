@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { db } from '../db/database.js';
+import { assignmentAgent } from '../agents/assignmentAgent.js';
 
 const router = Router();
 
@@ -10,14 +11,16 @@ router.get('/dashboard', (req, res) => {
     const todayStr = new Date().toISOString().split('T')[0];
 
     // 1. Study hours today and this week
-    const todayStudyMinutes = db.prepare(`
+    const todayRow = db.prepare(`
       SELECT SUM(duration_minutes) as total FROM study_sessions WHERE user_id = ? AND completed_at LIKE ?
-    `).get(userId, `${todayStr}%`).total || 0;
+    `).get(userId, `${todayStr}%`);
+    const todayStudyMinutes = todayRow?.total || 0;
 
     const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
-    const weeklyStudyMinutes = db.prepare(`
+    const weeklyRow = db.prepare(`
       SELECT SUM(duration_minutes) as total FROM study_sessions WHERE user_id = ? AND completed_at >= ?
-    `).get(userId, sevenDaysAgo).total || 0;
+    `).get(userId, sevenDaysAgo);
+    const weeklyStudyMinutes = weeklyRow?.total || 0;
 
     // 2. Study time per subject
     const subjectDistribution = db.prepare(`
@@ -29,11 +32,16 @@ router.get('/dashboard', (req, res) => {
       ORDER BY minutes DESC
     `).all(userId);
 
-    // 3. Assignment stats
-    const totalAssignments = db.prepare('SELECT COUNT(*) as count FROM assignments WHERE user_id = ?').get(userId).count;
-    const completedAssignments = db.prepare('SELECT COUNT(*) as count FROM assignments WHERE user_id = ? AND status = "completed"').get(userId).count;
+    // 3. Assignment stats (Single source of truth via assignmentAgent.calculatePriority)
+    const assignments = db.prepare(`
+      SELECT id, due_date, priority, status FROM assignments WHERE user_id = ?
+    `).all(userId);
+    const totalAssignments = assignments.length;
+    const completedAssignments = assignments.filter(a => a.status === 'completed').length;
     const pendingAssignments = totalAssignments - completedAssignments;
-    const urgentAssignments = db.prepare('SELECT COUNT(*) as count FROM assignments WHERE user_id = ? AND status != "completed" AND priority = "urgent"').get(userId).count;
+    const urgentAssignments = assignments.filter(a => 
+      a.status !== 'completed' && (a.priority === 'urgent' || assignmentAgent.calculatePriority(a.due_date) === 'urgent')
+    ).length;
 
     // 4. Nearest upcoming exam
     const nearestExam = db.prepare(`
@@ -55,7 +63,7 @@ router.get('/dashboard', (req, res) => {
       SELECT COUNT(*) as total_attempts, AVG(percentage) as average_percentage
       FROM quiz_attempts
       WHERE user_id = ?
-    `).get(userId);
+    `).get(userId) || {};
 
     // 6. Timetable completion today
     const dayOfWeek = new Date().getDay();
@@ -65,7 +73,7 @@ router.get('/dashboard', (req, res) => {
         SUM(CASE WHEN is_completed = 1 THEN 1 ELSE 0 END) as completed_slots
       FROM timetable_slots
       WHERE user_id = ? AND (date = ? OR day_of_week = ?)
-    `).get(userId, todayStr, dayOfWeek);
+    `).get(userId, todayStr, dayOfWeek) || {};
 
     // 7. Study streak calculation
     const sessionDays = db.prepare(`
@@ -82,7 +90,7 @@ router.get('/dashboard', (req, res) => {
     if (!hasToday) {
       checkDate.setDate(checkDate.getDate() - 1);
     }
-    while (true) {
+    for (let i = 0; i < 30; i++) {
       const dStr = checkDate.toISOString().split('T')[0];
       if (sessionDays.includes(dStr)) {
         streak++;
@@ -113,6 +121,7 @@ router.get('/dashboard', (req, res) => {
       }
     });
   } catch (error) {
+    console.error('[Stats Routes Error /dashboard]', error);
     res.status(500).json({ error: 'Failed to fetch dashboard stats', details: error.message });
   }
 });

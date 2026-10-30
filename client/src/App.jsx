@@ -32,6 +32,8 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [stats, setStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState(null);
   const [todaySlots, setTodaySlots] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [exams, setExams] = useState([]);
@@ -56,11 +58,30 @@ export default function App() {
     }
   };
 
+  const loadStats = async () => {
+    try {
+      setStatsLoading(true);
+      setStatsError(null);
+      const res = await apiStats.getDashboard();
+      if (res.stats) {
+        setStats(res.stats);
+      }
+    } catch (err) {
+      console.warn('Dashboard stats refresh error:', err.message);
+      setStatsError('Unable to load live dashboard stats');
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
   const loadGlobalData = async () => {
     try {
       const todayStr = new Date().toISOString().split('T')[0];
+      setStatsLoading(true);
       const [statsRes, slotsRes, assignRes, examsRes, agentRes] = await Promise.all([
-        apiStats.getDashboard().catch(() => ({ stats: null })),
+        apiStats.getDashboard()
+          .then(res => { setStatsError(null); return res; })
+          .catch((err) => { setStatsError('Failed to fetch dashboard stats'); return { stats: null }; }),
         apiPlanner.getSlots(todayStr).catch(() => ({ slots: [] })),
         apiAssignments.getAll().catch(() => ({ assignments: [] })),
         apiExams.getAll().catch(() => ({ exams: [] })),
@@ -74,6 +95,8 @@ export default function App() {
       if (agentRes) setAgentStatus(agentRes);
     } catch (e) {
       console.error('Failed to load global data', e);
+    } finally {
+      setStatsLoading(false);
     }
   };
 
@@ -143,20 +166,26 @@ export default function App() {
       />
 
       {/* Mobile Menu Button Banner */}
-      <div className="md:hidden flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800 text-xs">
+      <div className="md:hidden flex items-center justify-between px-3 sm:px-4 py-2 bg-slate-900 border-b border-slate-800 text-xs w-full max-w-full">
         <div className="flex items-center space-x-2">
           <button
+            type="button"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-1.5 rounded-lg bg-slate-800 text-slate-300"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-slate-800 text-slate-300 hover:text-white"
+            aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-nav-drawer"
           >
-            {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
-          <span className="font-bold text-white capitalize">{currentTab}</span>
+          <span className="font-bold text-white capitalize text-sm">{currentTab}</span>
         </div>
 
         <button
+          type="button"
           onClick={() => setIsAuthModalOpen(true)}
-          className="text-[11px] text-indigo-400 font-semibold flex items-center space-x-1"
+          className="text-xs text-indigo-400 font-semibold flex items-center space-x-1 min-h-[44px] px-2.5 rounded-lg hover:bg-slate-800"
+          aria-label={currentUser?.name ? `Signed in as ${currentUser.name}` : "Sign In to account"}
         >
           <span>{currentUser?.name || 'Sign In'}</span>
         </button>
@@ -164,24 +193,28 @@ export default function App() {
 
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
-        <div className="md:hidden bg-slate-900 border-b border-slate-800 p-3 grid grid-cols-3 gap-2 z-20 animate-in slide-in-from-top duration-200">
+        <div 
+          id="mobile-nav-drawer"
+          className="md:hidden bg-slate-900 border-b border-slate-800 p-3 grid grid-cols-2 sm:grid-cols-3 gap-2 z-20 animate-in slide-in-from-top duration-200"
+        >
           {mobileNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentTab === item.id;
             return (
               <button
+                type="button"
                 key={item.id}
                 onClick={() => {
                   setCurrentTab(item.id);
                   setMobileMenuOpen(false);
                 }}
-                className={`flex flex-col items-center p-2.5 rounded-xl text-xs font-semibold transition ${
+                className={`flex flex-col items-center justify-center p-3 rounded-xl text-xs font-semibold transition min-h-[48px] ${
                   isActive
                     ? 'bg-indigo-600 text-white'
                     : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800'
                 }`}
               >
-                <Icon className="w-4 h-4 mb-1" />
+                <Icon className="w-5 h-5 mb-1" />
                 <span className="truncate">{item.label}</span>
               </button>
             );
@@ -190,7 +223,7 @@ export default function App() {
       )}
 
       {/* Main App Workspace */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden w-full max-w-full">
         {/* Desktop Sidebar */}
         <Sidebar
           currentTab={currentTab}
@@ -200,10 +233,13 @@ export default function App() {
         />
 
         {/* Dynamic View Container */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 overflow-y-auto p-3.5 sm:p-6 lg:p-8 max-w-full">
           {currentTab === 'dashboard' && (
             <DashboardView
               stats={stats}
+              statsLoading={statsLoading}
+              statsError={statsError}
+              onRetryStats={loadStats}
               todaySlots={todaySlots}
               assignments={assignments}
               exams={exams}

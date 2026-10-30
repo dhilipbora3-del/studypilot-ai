@@ -129,10 +129,11 @@ export const apiAuth = {
 
 // Chat API
 export const apiChat = {
-  sendMessage: (message, dailyStudyHours, selectedAgent = 'auto', providerOverride = null, modelOverride = null) => {
+  sendMessage: (message, dailyStudyHours, selectedAgent = 'auto', providerOverride = null, modelOverride = null, signal = null) => {
     const prov = providerOverride || getActiveProvider();
     return fetchJson('/chat', {
       method: 'POST',
+      signal,
       body: JSON.stringify({ 
         message, 
         dailyStudyHours, 
@@ -143,7 +144,7 @@ export const apiChat = {
       })
     });
   },
-  getHistory: () => fetchJson('/chat/history'),
+  getHistory: (signal = null) => fetchJson('/chat/history', { signal }),
   clearHistory: () => fetchJson('/chat/history', { method: 'DELETE' })
 };
 

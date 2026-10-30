@@ -218,11 +218,12 @@ export default function TimerView() {
           {/* Subject & Notes Tagging */}
           <div className="w-full max-w-md grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div>
-              <label className="block text-slate-400 mb-1 font-medium">Tag Subject</label>
+              <label htmlFor="timer-subject-select" className="block text-slate-400 mb-1 font-medium">Tag Subject</label>
               <select
+                id="timer-subject-select"
                 value={selectedSubjectId}
                 onChange={(e) => setSelectedSubjectId(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                className="w-full min-h-[44px] bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
               >
                 {subjects.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
@@ -231,13 +232,14 @@ export default function TimerView() {
             </div>
 
             <div>
-              <label className="block text-slate-400 mb-1 font-medium">Study Focus Note</label>
+              <label htmlFor="timer-notes-input" className="block text-slate-400 mb-1 font-medium">Study Focus Note</label>
               <input
+                id="timer-notes-input"
                 type="text"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="e.g. Practicing problem set 4"
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                className="w-full min-h-[44px] bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
               />
             </div>
           </div>
@@ -245,8 +247,10 @@ export default function TimerView() {
           {/* Controls: Play/Pause/Reset */}
           <div className="flex items-center space-x-4 pt-2">
             <button
+              type="button"
               onClick={() => setIsRunning(!isRunning)}
-              className="px-8 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-xl shadow-indigo-600/30 transition transform active:scale-95 flex items-center space-x-2"
+              className="min-h-[44px] px-8 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-xl shadow-indigo-600/30 transition transform active:scale-95 flex items-center space-x-2"
+              aria-label={isRunning ? "Pause focus session" : "Start focus session"}
             >
               {isRunning ? (
                 <>
@@ -262,8 +266,10 @@ export default function TimerView() {
             </button>
 
             <button
+              type="button"
               onClick={resetTimer}
-              className="p-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+              aria-label="Reset Timer"
               title="Reset Timer"
             >
               <RotateCcw className="w-5 h-5" />

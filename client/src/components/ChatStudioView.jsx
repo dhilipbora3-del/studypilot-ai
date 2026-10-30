@@ -20,7 +20,11 @@ import {
   Award,
   BookOpen,
   Sliders,
-  ExternalLink
+  ExternalLink,
+  XCircle,
+  AlertCircle,
+  Zap,
+  Info
 } from 'lucide-react';
 import AgentTraceViewer from './AgentTraceViewer';
 import AISettingsModal from './AISettingsModal';
@@ -34,7 +38,8 @@ import {
   setActiveProvider, 
   getActiveModel, 
   setActiveModel, 
-  getProviderKey 
+  getProviderKey,
+  getCustomLLMKey
 } from '../api';
 
 export default function ChatStudioView({ initialPrompt = '', onActionCompleted }) {
@@ -50,18 +55,29 @@ export default function ChatStudioView({ initialPrompt = '', onActionCompleted }
   const [activeModel, setActiveModelState] = useState(getActiveModel(getActiveProvider() || 'chatgpt'));
   const [hasCustomKey, setHasCustomKey] = useState(Boolean(getProviderKey(getActiveProvider() || 'chatgpt')));
   const [copiedMessageId, setCopiedMessageId] = useState(null);
+  const [keyRequiredNotice, setKeyRequiredNotice] = useState(null);
+
   const messagesEndRef = useRef(null);
+  const abortControllerRef = useRef(null);
+  const timeoutRef = useRef(null);
 
   useEffect(() => {
     loadChatHistory();
     refreshEngineState();
+
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort('unmount');
+      }
+    };
   }, []);
 
   const refreshEngineState = () => {
     const prov = getActiveProvider() || 'chatgpt';
     setActiveProviderState(prov);
     setActiveModelState(getActiveModel(prov));
-    setHasCustomKey(Boolean(getProviderKey(prov)));
+    setHasCustomKey(prov === 'offline' ? true : Boolean(getProviderKey(prov)));
   };
 
   const handleSwitchProvider = (prov) => {
@@ -69,7 +85,8 @@ export default function ChatStudioView({ initialPrompt = '', onActionCompleted }
     setActiveProviderState(prov);
     const mod = getActiveModel(prov);
     setActiveModelState(mod);
-    setHasCustomKey(Boolean(getProviderKey(prov)));
+    setHasCustomKey(prov === 'offline' ? true : Boolean(getProviderKey(prov)));
+    setKeyRequiredNotice(null);
   };
 
   useEffect(() => {
@@ -97,14 +114,14 @@ export default function ChatStudioView({ initialPrompt = '', onActionCompleted }
             id: 'welcome',
             role: 'assistant',
             content: `### 👋 Welcome to StudyPilot Multi-Agent Studio!
-Powered by **ChatGPT**, **Claude**, and **Google Gemini**:
+Powered by **ChatGPT**, **Claude**, **Google Gemini**, and the **Offline Academic Engine**:
 - 💡 **AI Tutor**: Deep conceptual mastery, real-world analogies, active-recall flashcards.
 - 📅 **Study Planner**: Optimizes conflict-free timetables with built-in ergonomic breaks.
 - 📋 **Assignment Solver**: Deconstructs deadlines and provides Socratic problem guidance.
 - 🎯 **Exam Specialist**: Prepares diagnostic practice questions and calculates mastery.
 - 🛡️ **Review Agent**: Audits calculations, dates, and schedule collisions before presenting.
 
-Select an agent below and switch between **ChatGPT**, **Claude**, and **Gemini** in the top bar!`,
+Select an agent below or toggle models in the top bar!`,
             agentTraces: [
               {
                 agent: 'Manager Agent',
@@ -124,9 +141,30 @@ Select an agent below and switch between **ChatGPT**, **Claude**, and **Gemini**
     }
   };
 
+  const handleCancelRequest = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort('user_cancelled');
+    }
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    setLoading(false);
+  };
+
   const handleSend = async (textToSend) => {
     const query = textToSend || input;
     if (!query || !query.trim() || loading) return;
+
+    // Gating: If provider is not 'offline' and no key is configured, block submission before creating pending message
+    const needsKey = activeProvider !== 'offline' && !hasCustomKey;
+    if (needsKey) {
+      setKeyRequiredNotice({
+        provider: activeProvider,
+        pendingQuery: query.trim()
+      });
+      return;
+    }
+    setKeyRequiredNotice(null);
 
     const userMsg = {
       id: Date.now(),
@@ -138,8 +176,27 @@ Select an agent below and switch between **ChatGPT**, **Claude**, and **Gemini**
     setInput('');
     setLoading(true);
 
+    // Setup AbortController and 15s timeout
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort('new_request');
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      controller.abort('timeout');
+    }, 15000);
+
     try {
-      const result = await apiChat.sendMessage(query.trim(), dailyHours, selectedAgent, activeProvider, activeModel);
+      const result = await apiChat.sendMessage(
+        query.trim(), 
+        dailyHours, 
+        selectedAgent, 
+        activeProvider, 
+        activeModel,
+        controller.signal
+      );
 
       const assistantMsg = {
         id: Date.now() + 1,
@@ -153,23 +210,37 @@ Select an agent below and switch between **ChatGPT**, **Claude**, and **Gemini**
 
       setMessages(prev => [...prev, assistantMsg]);
     } catch (err) {
-      console.error(err);
+      const isAborted = controller.signal.aborted;
+      const isTimeout = isAborted && controller.signal.reason === 'timeout';
+      const isUserCancel = isAborted && controller.signal.reason === 'user_cancelled';
+
+      let errorMsgContent = `⚠️ **Request Notice**: Unable to complete request (${err.message}). Your current student workspace is safely preserved.`;
+      if (isTimeout) {
+        errorMsgContent = `⏱️ **Request Timed Out**: The agent pipeline took longer than 15 seconds. You can retry with a different provider or use the built-in offline engine.`;
+      } else if (isUserCancel) {
+        errorMsgContent = `🛑 **Request Cancelled**: Agent execution was stopped at your request.`;
+      }
+
       setMessages(prev => [
         ...prev,
         {
           id: Date.now() + 1,
           role: 'assistant',
-          content: `⚠️ **Request Notice**: Unable to complete request (${err.message}). Your current student workspace is safely preserved.`,
-          agentTraces: []
+          content: errorMsgContent,
+          agentTraces: [],
+          isError: true,
+          retryQuery: query.trim()
         }
       ]);
     } finally {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      abortControllerRef.current = null;
       setLoading(false);
     }
   };
 
   const handleClearHistory = async () => {
-    if (confirm('Clear chat history?')) {
+    if (window.confirm('Clear all conversation history?')) {
       await apiChat.clearHistory();
       setMessages([]);
       loadChatHistory();
@@ -233,78 +304,111 @@ Select an agent below and switch between **ChatGPT**, **Claude**, and **Gemini**
   return (
     <div className="flex flex-col h-[calc(100vh-5rem)] max-w-5xl mx-auto rounded-2xl bg-slate-900 border border-slate-800 overflow-hidden shadow-2xl">
       {/* Top Studio Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between px-5 py-3 bg-slate-800/80 border-b border-slate-700/80 gap-2 text-xs">
-        <div className="flex items-center space-x-2">
-          <Bot className="w-4 h-4 text-indigo-400" />
-          <span className="font-bold text-white">StudyPilot Multi-Agent Studio</span>
-          <span className="text-slate-400 hidden md:inline">• 6 Synchronized Autonomous Agents</span>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between px-3 sm:px-5 py-3 bg-slate-800/80 border-b border-slate-700/80 gap-2.5 text-xs">
+        <div className="flex items-center space-x-2 min-w-0">
+          <Bot className="w-4 h-4 text-indigo-400 shrink-0" />
+          <span className="font-bold text-white truncate">StudyPilot Multi-Agent Studio</span>
+          <span className="text-slate-400 hidden lg:inline">• 6 Synchronized Autonomous Agents</span>
         </div>
 
-        <div className="flex items-center space-x-2 sm:space-x-3 self-end sm:self-auto">
-          {/* Flagship Engine Selector Pill (ChatGPT, Claude, Gemini) */}
-          <div className="flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-700/80 space-x-0.5">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5">
+          {/* Flagship Engine Selector Pill */}
+          <div 
+            role="group"
+            aria-label="AI Engine Provider Selector"
+            className="flex flex-wrap items-center bg-slate-900/90 p-1 rounded-xl border border-slate-700/80 gap-1"
+          >
             <button
+              type="button"
               onClick={() => handleSwitchProvider('chatgpt')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+              className={`min-h-[44px] sm:min-h-[36px] px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
                 activeProvider === 'chatgpt'
                   ? 'bg-emerald-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'
               }`}
-              title="Switch to OpenAI ChatGPT (GPT-4o)"
+              title="OpenAI ChatGPT (GPT-4o)"
+              aria-pressed={activeProvider === 'chatgpt'}
             >
               <span>ChatGPT</span>
             </button>
             <button
+              type="button"
               onClick={() => handleSwitchProvider('claude')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+              className={`min-h-[44px] sm:min-h-[36px] px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
                 activeProvider === 'claude'
                   ? 'bg-amber-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'
               }`}
-              title="Switch to Anthropic Claude (Claude 3.5 Sonnet)"
+              title="Anthropic Claude (Claude 3.5 Sonnet)"
+              aria-pressed={activeProvider === 'claude'}
             >
               <span>Claude</span>
             </button>
             <button
+              type="button"
               onClick={() => handleSwitchProvider('gemini')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+              className={`min-h-[44px] sm:min-h-[36px] px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
                 activeProvider === 'gemini'
                   ? 'bg-indigo-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'
               }`}
-              title="Switch to Google Gemini (1.5 / 2.0 Flash)"
+              title="Google Gemini (1.5 / 2.0 Flash - Free Key)"
+              aria-pressed={activeProvider === 'gemini'}
             >
               <span>Gemini</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSwitchProvider('offline')}
+              className={`min-h-[44px] sm:min-h-[36px] px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+                activeProvider === 'offline'
+                  ? 'bg-slate-700 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Built-in Deterministic Academic Engine (Works offline)"
+              aria-pressed={activeProvider === 'offline'}
+            >
+              <span>Built-in (Offline)</span>
             </button>
           </div>
 
           {/* AI Key Config Button */}
-          <button
-            onClick={() => setShowSettingsModal(true)}
-            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
-              hasCustomKey
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
-                : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20'
-            }`}
-          >
-            <Key className="w-3.5 h-3.5" />
-            <span>{hasCustomKey ? 'Key Connected' : 'Configure Key'}</span>
-            <span className={`w-2 h-2 rounded-full ${hasCustomKey ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-          </button>
+          {activeProvider !== 'offline' && (
+            <button
+              type="button"
+              onClick={() => setShowSettingsModal(true)}
+              className={`min-h-[44px] sm:min-h-[36px] flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
+                hasCustomKey
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
+                  : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20'
+              }`}
+              aria-label={hasCustomKey ? "API Key connected for current engine. Open AI settings" : "Configure API key for current engine"}
+            >
+              <Key className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden xs:inline">{hasCustomKey ? 'Key Connected' : 'Configure Key'}</span>
+              <span className={`w-2 h-2 rounded-full shrink-0 ${hasCustomKey ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+            </button>
+          )}
 
           <button
+            type="button"
             onClick={handleClearHistory}
-            className="flex items-center space-x-1 text-slate-400 hover:text-rose-400 transition"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center space-x-1 text-slate-400 hover:text-rose-400 transition"
             title="Clear Chat History"
+            aria-label="Clear chat conversation history"
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <Trash2 className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Clear</span>
           </button>
         </div>
       </div>
 
       {/* Specialist Agent Selector Bar */}
-      <div className="px-4 py-2 bg-slate-950/70 border-b border-slate-800/80 flex items-center space-x-1.5 overflow-x-auto text-xs">
+      <div 
+        role="tablist"
+        aria-label="Delegate prompt to specific specialist agent"
+        className="px-4 py-2 bg-slate-950/70 border-b border-slate-800/80 flex items-center space-x-1.5 overflow-x-auto text-xs"
+      >
         <span className="text-slate-500 text-[11px] font-bold uppercase tracking-wider shrink-0 mr-1">
           Delegate to:
         </span>
@@ -313,9 +417,12 @@ Select an agent below and switch between **ChatGPT**, **Claude**, and **Gemini**
           const isSelected = selectedAgent === agent.id;
           return (
             <button
+              type="button"
+              role="tab"
+              aria-selected={isSelected}
               key={agent.id}
               onClick={() => setSelectedAgent(agent.id)}
-              className={`flex items-center space-x-1 px-3 py-1 rounded-lg shrink-0 transition text-xs font-semibold ${
+              className={`min-h-[44px] sm:min-h-[32px] flex items-center space-x-1.5 px-3 py-1 rounded-lg shrink-0 transition text-xs font-semibold ${
                 isSelected
                   ? 'bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-500/40'
                   : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
@@ -328,26 +435,70 @@ Select an agent below and switch between **ChatGPT**, **Claude**, and **Gemini**
         })}
       </div>
 
-      {/* Optional Notice when key is missing */}
-      {!hasCustomKey && (
-        <div className="px-4 py-2 bg-indigo-950/40 border-b border-indigo-500/20 flex items-center justify-between text-[11px] text-indigo-200">
+      {/* Actionable Missing Key Banner / Callout */}
+      {keyRequiredNotice && (
+        <div 
+          role="alert" 
+          className="mx-3 sm:mx-4 mt-3 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in"
+        >
+          <div className="flex items-start space-x-2">
+            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold text-amber-300 block">Connect an API Key to Continue</span>
+              <span>
+                Live tutoring with <strong>{keyRequiredNotice.provider.toUpperCase()}</strong> requires an API key. Connect your key, or immediately use the Built-in Offline Academic Engine.
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2 shrink-0 self-end sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setShowSettingsModal(true)}
+              className="min-h-[44px] px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition text-xs shadow-md"
+            >
+              Connect Key
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                handleSwitchProvider('offline');
+                if (keyRequiredNotice.pendingQuery) {
+                  handleSend(keyRequiredNotice.pendingQuery);
+                }
+              }}
+              className="min-h-[44px] px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold border border-slate-700 transition text-xs"
+            >
+              Use Built-in Engine
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Offline vs Live Clarification Banner */}
+      {activeProvider === 'offline' && (
+        <div className="px-4 py-2 bg-slate-850 border-b border-slate-800 flex items-center justify-between text-[11px] text-slate-300">
           <div className="flex items-center space-x-1.5 truncate mr-2">
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+            <Info className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
             <span className="truncate">
-              Selected <strong>{activeProvider.toUpperCase()}</strong>. Connect your API key (or switch to <strong>Google Gemini</strong> for a 100% free key with no credit card).
+              <strong>Offline Mode Active:</strong> Core syllabus explanations, timetable generation, and flashcards work without an API key.
             </span>
           </div>
           <button
-            onClick={() => setShowSettingsModal(true)}
-            className="px-2.5 py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shrink-0 transition text-[11px]"
+            type="button"
+            onClick={() => handleSwitchProvider('gemini')}
+            className="text-indigo-400 hover:text-indigo-300 font-semibold shrink-0 transition text-[11px] underline"
           >
-            Connect Key
+            Enable Live AI
           </button>
         </div>
       )}
 
       {/* Messages Stream */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+      <div 
+        tabIndex={0}
+        aria-label="Conversation messages"
+        className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-5 focus:outline-none"
+      >
         {messages.map((msg, index) => {
           const isUser = msg.role === 'user';
           const hasTraces = msg.agentTraces && msg.agentTraces.length > 0;
@@ -389,23 +540,26 @@ Select an agent below and switch between **ChatGPT**, **Claude**, and **Gemini**
                           )}
                         </div>
 
-                        <button
-                          onClick={() => handleCopySolution(msg.id, msg.content)}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-900/80 hover:bg-slate-750 text-slate-300 hover:text-white transition text-[11px] border border-slate-700/60 shadow-sm"
-                          title="Copy clean solution"
-                        >
-                          {isCopied ? (
-                            <>
-                              <Check className="w-3.5 h-3.5 text-emerald-400" />
-                              <span className="text-emerald-400 font-medium">Copied!</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-3.5 h-3.5 text-slate-400" />
-                              <span>Copy Solution</span>
-                            </>
-                          )}
-                        </button>
+                        {!msg.isError && (
+                          <button
+                            type="button"
+                            onClick={() => handleCopySolution(msg.id, msg.content)}
+                            className="min-h-[44px] sm:min-h-[28px] flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-900/80 hover:bg-slate-750 text-slate-300 hover:text-white transition text-[11px] border border-slate-700/60 shadow-sm"
+                            aria-label="Copy solution to clipboard"
+                          >
+                            {isCopied ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                <span className="text-emerald-400 font-medium">Copied!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3.5 h-3.5 text-slate-400" />
+                                <span>Copy Solution</span>
+                              </>
+                            )}
+                          </button>
+                        )}
                       </div>
 
                       {/* Clean Markdown Solution */}
@@ -413,6 +567,31 @@ Select an agent below and switch between **ChatGPT**, **Claude**, and **Gemini**
                         content={msg.content}
                         hideTrailers={Boolean(meta.flashcards?.length || meta.practiceQuestion)}
                       />
+
+                      {/* Retry Option if this is an error message */}
+                      {msg.isError && msg.retryQuery && (
+                        <div className="pt-3 mt-3 border-t border-slate-700/60 flex items-center space-x-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSend(msg.retryQuery)}
+                            className="min-h-[44px] sm:min-h-[32px] px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center space-x-1.5 transition shadow-sm"
+                            aria-label="Retry prompt request"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            <span>Retry Request</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleSwitchProvider('offline');
+                              handleSend(msg.retryQuery);
+                            }}
+                            className="min-h-[44px] sm:min-h-[32px] px-3 py-1.5 rounded-lg bg-slate-750 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition border border-slate-700"
+                          >
+                            Try with Offline Engine
+                          </button>
+                        </div>
+                      )}
 
                       {/* Interactive Practice Question Checkpoint */}
                       {meta.practiceQuestion && (
@@ -428,9 +607,10 @@ Select an agent below and switch between **ChatGPT**, **Claude**, and **Gemini**
                               Active Recall Flashcards ({meta.flashcards.length})
                             </span>
                             <button
+                              type="button"
                               onClick={() => handleSaveFlashcards(msg.id, meta.flashcards)}
                               disabled={importStatus[`fc_${msg.id}`] === 'saved'}
-                              className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-emerald-600 text-white text-[11px] font-semibold flex items-center space-x-1 transition"
+                              className="min-h-[44px] sm:min-h-[32px] px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-emerald-600 text-white text-[11px] font-semibold flex items-center space-x-1 transition"
                             >
                               {importStatus[`fc_${msg.id}`] === 'saved' ? (
                                 <>
@@ -472,9 +652,10 @@ Select an agent below and switch between **ChatGPT**, **Claude**, and **Gemini**
                           Proposed Timetable Blocks ({meta.scheduleSlots.length})
                         </span>
                         <button
+                          type="button"
                           onClick={() => handleApplySchedule(msg.id, meta.scheduleSlots)}
                           disabled={importStatus[`slot_${msg.id}`] === 'saved'}
-                          className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-emerald-600 text-white text-[11px] font-semibold flex items-center space-x-1 transition"
+                          className="min-h-[44px] sm:min-h-[32px] px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-emerald-600 text-white text-[11px] font-semibold flex items-center space-x-1 transition"
                         >
                           {importStatus[`slot_${msg.id}`] === 'saved' ? (
                             <>
@@ -524,15 +705,28 @@ Select an agent below and switch between **ChatGPT**, **Claude**, and **Gemini**
           );
         })}
 
+        {/* Loading Indicator with Cancel Action */}
         {loading && (
-          <div className="flex items-start space-x-2.5 max-w-xl">
+          <div role="status" aria-busy="true" className="flex items-start space-x-2.5 max-w-xl">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center shrink-0 shadow-md">
               <Bot className="w-4 h-4 text-white" />
             </div>
-            <div className="p-4 rounded-2xl bg-slate-800/90 border border-slate-700/80 rounded-tl-none space-y-3">
-              <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-400">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Manager Agent delegating to {selectedAgent === 'auto' ? 'specialized agents' : `${selectedAgent} agent`}...</span>
+            <div className="p-4 rounded-2xl bg-slate-800/90 border border-slate-700/80 rounded-tl-none space-y-3 flex-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-400">
+                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                  <span className="truncate">
+                    Manager Agent delegating to {selectedAgent === 'auto' ? 'specialized agents' : `${selectedAgent} agent`}...
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCancelRequest}
+                  className="min-h-[44px] sm:min-h-[30px] px-2.5 py-1 rounded-lg bg-slate-750 hover:bg-rose-950/60 hover:text-rose-300 text-slate-300 text-xs font-semibold border border-slate-600 transition shrink-0 ml-2"
+                  aria-label="Cancel AI agent request"
+                >
+                  Cancel
+                </button>
               </div>
               <div className="flex items-center space-x-3 text-[11px] text-slate-400">
                 <span className="flex items-center">
@@ -554,13 +748,17 @@ Select an agent below and switch between **ChatGPT**, **Claude**, and **Gemini**
 
       {/* Suggested prompts carousel */}
       {messages.length <= 2 && (
-        <div className="px-4 py-2 bg-slate-950/40 border-t border-slate-800/80 flex items-center space-x-2 overflow-x-auto text-[11px]">
+        <div 
+          aria-label="Quick prompt suggestions"
+          className="px-3 sm:px-4 py-2 bg-slate-950/40 border-t border-slate-800/80 flex items-center space-x-2 overflow-x-auto text-[11px]"
+        >
           <span className="text-slate-500 shrink-0 font-medium">Quick Prompts:</span>
           {promptSuggestions.map((prompt, pIdx) => (
             <button
+              type="button"
               key={pIdx}
               onClick={() => handleSend(prompt)}
-              className="px-2.5 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 shrink-0 transition"
+              className="min-h-[44px] sm:min-h-[30px] px-3 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 shrink-0 transition flex items-center"
             >
               {prompt}
             </button>
@@ -569,7 +767,7 @@ Select an agent below and switch between **ChatGPT**, **Claude**, and **Gemini**
       )}
 
       {/* Chat Input Bar */}
-      <div className="p-3.5 bg-slate-950 border-t border-slate-800">
+      <div className="p-3 sm:p-3.5 bg-slate-950 border-t border-slate-800">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -577,11 +775,16 @@ Select an agent below and switch between **ChatGPT**, **Claude**, and **Gemini**
           }}
           className="flex items-center space-x-2"
         >
+          <label htmlFor="chat-user-input" className="sr-only">
+            Ask StudyPilot AI
+          </label>
           <input
+            id="chat-user-input"
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={
+              activeProvider === 'offline' ? 'Ask Offline AI Tutor: Calculus, Algorithms, Biology, Physics...' :
               selectedAgent === 'tutor' ? 'Ask AI Tutor to explain any topic or formula...' :
               selectedAgent === 'planner' ? 'Ask Study Planner to build a timetable...' :
               selectedAgent === 'assignment' ? 'Ask Assignment Solver to break down homework...' :
@@ -589,17 +792,30 @@ Select an agent below and switch between **ChatGPT**, **Claude**, and **Gemini**
               'Ask StudyPilot AI: Tutor, Planner, Assignment Solver, or Exam Specialist...'
             }
             disabled={loading}
-            className="flex-1 bg-slate-900 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition"
+            className="flex-1 min-h-[44px] bg-slate-900 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition"
           />
 
-          <button
-            type="submit"
-            disabled={loading || !input.trim()}
-            className="px-4 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 text-white font-semibold text-sm shadow-md shadow-indigo-600/30 transition flex items-center space-x-1.5"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            <span className="hidden sm:inline">Send</span>
-          </button>
+          {loading ? (
+            <button
+              type="button"
+              onClick={handleCancelRequest}
+              className="min-h-[44px] px-4 py-2.5 rounded-xl bg-rose-600/80 hover:bg-rose-600 text-white font-semibold text-xs transition flex items-center space-x-1.5"
+              aria-label="Cancel ongoing request"
+            >
+              <XCircle className="w-4 h-4" />
+              <span className="hidden sm:inline">Cancel</span>
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={!input.trim()}
+              className="min-h-[44px] px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 text-white font-semibold text-sm shadow-md shadow-indigo-600/30 transition flex items-center space-x-1.5 shrink-0"
+              aria-label="Send message to StudyPilot AI"
+            >
+              <Send className="w-4 h-4" />
+              <span className="hidden sm:inline">Send</span>
+            </button>
+          )}
         </form>
       </div>
 
@@ -607,7 +823,10 @@ Select an agent below and switch between **ChatGPT**, **Claude**, and **Gemini**
       <AISettingsModal
         isOpen={showSettingsModal}
         onClose={() => setShowSettingsModal(false)}
-        onKeyUpdated={() => setHasCustomKey(Boolean(getCustomLLMKey()))}
+        onKeyUpdated={() => {
+          refreshEngineState();
+          setKeyRequiredNotice(null);
+        }}
       />
     </div>
   );

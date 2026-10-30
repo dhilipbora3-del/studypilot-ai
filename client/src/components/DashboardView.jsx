@@ -18,6 +18,9 @@ import {
 
 export default function DashboardView({ 
   stats, 
+  statsLoading = false,
+  statsError = null,
+  onRetryStats,
   todaySlots = [], 
   assignments = [], 
   exams = [], 
@@ -25,13 +28,41 @@ export default function DashboardView({
   onNavigate, 
   onQuickChat 
 }) {
-  const nearestExam = stats?.nearestExam || exams[0];
+  const nearestExam = stats?.nearestExam || (exams && exams.length > 0 ? {
+    ...exams[0],
+    days_remaining: Math.max(0, Math.ceil((new Date(exams[0].exam_date) - new Date()) / (1000 * 60 * 60 * 24)))
+  } : null);
+
   const pendingAssignments = assignments.filter(a => a.status !== 'completed');
+  const derivedUrgent = assignments.filter(a => 
+    a.status !== 'completed' && (a.priority === 'urgent' || a.calculated_priority === 'urgent')
+  ).length;
+  const urgentCount = stats?.urgentAssignments ?? derivedUrgent;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 max-w-7xl mx-auto w-full">
+      {/* Non-blocking error notification */}
+      {statsError && (
+        <div role="alert" className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>{statsError} — displaying synchronized local student records.</span>
+          </div>
+          {onRetryStats && (
+            <button
+              type="button"
+              onClick={onRetryStats}
+              className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-semibold text-[11px] transition shrink-0 min-h-[36px]"
+              aria-label="Retry loading dashboard statistics"
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Welcome Banner with Quick Multi-Agent Prompt */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-900/60 via-purple-900/40 to-slate-900 p-6 border border-indigo-500/20 shadow-xl">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-900/60 via-purple-900/40 to-slate-900 p-5 sm:p-6 border border-indigo-500/20 shadow-xl">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1.5">
             <div className="flex items-center space-x-2">
@@ -53,15 +84,19 @@ export default function DashboardView({
 
           <div className="flex flex-wrap items-center gap-2.5">
             <button
+              type="button"
               onClick={() => onQuickChat("Generate today's optimal study schedule for my upcoming exam")}
-              className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 transition transform active:scale-95"
+              className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 transition transform active:scale-95 min-h-[44px]"
+              aria-label="Optimize today's schedule with AI"
             >
               <Sparkles className="w-4 h-4" />
               <span>Optimize My Day</span>
             </button>
             <button
+              type="button"
               onClick={() => onNavigate('timer')}
-              className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
+              className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition min-h-[44px]"
+              aria-label="Start Pomodoro study session"
             >
               <Play className="w-3.5 h-3.5 text-indigo-400" />
               <span>Start Pomodoro</span>
@@ -81,7 +116,13 @@ export default function DashboardView({
             </div>
           </div>
           <div className="text-2xl font-black text-white">
-            {stats?.todayStudyMinutes || 0} <span className="text-sm font-normal text-slate-400">mins</span>
+            {statsLoading && !stats ? (
+              <span className="text-base text-slate-500 animate-pulse font-normal">Loading...</span>
+            ) : (
+              <>
+                {stats?.todayStudyMinutes || 0} <span className="text-sm font-normal text-slate-400">mins</span>
+              </>
+            )}
           </div>
           <div className="mt-2 text-[11px] text-slate-400 flex items-center">
             <TrendingUp className="w-3 h-3 text-emerald-400 mr-1" />
@@ -100,7 +141,7 @@ export default function DashboardView({
           <div className="text-2xl font-black text-white">
             {stats?.pendingAssignments ?? pendingAssignments.length}
             <span className="text-xs font-semibold ml-2 px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30">
-              {stats?.urgentAssignments || 0} urgent
+              {urgentCount} urgent
             </span>
           </div>
           <div className="mt-2 text-[11px] text-slate-400">
