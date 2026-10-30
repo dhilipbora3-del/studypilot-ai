@@ -315,6 +315,25 @@ async function runAuditTests() {
     'TutorAgent dynamically synthesizes domain-specific structured breakdown for humanities queries'
   );
 
+  // 6g. Loops vs OOP Disambiguation (Bugfix: "loops" should never match "oop")
+  const loopsRes = await tutorAgent.execute('the ai sucks i am asking about loops and it is giving oops', { provider: 'offline' });
+  assert(
+    loopsRes.output.includes('Loops, Iteration & Control Flow') && !loopsRes.output.includes('4 Pillars of Object-Oriented Programming'),
+    'TutorAgent correctly identifies loops inquiry and delivers Loops & Control Flow without confusing with OOP'
+  );
+
+  const oopsRes = await tutorAgent.execute('explain oop in java', { provider: 'offline' });
+  assert(
+    oopsRes.output.includes('The 4 Pillars of Object-Oriented Programming (OOP)'),
+    'TutorAgent correctly routes explicit OOP inquiry to 4 Pillars of Object-Oriented Programming'
+  );
+
+  const managerLoops = await managerAgent.processRequest('give me an explanation of loops', { provider: 'offline' });
+  assert(
+    managerLoops.activeAgents.includes('AI Tutor Agent') && !managerLoops.activeAgents.includes('Study Planner Agent'),
+    'ManagerAgent does not misinterpret "explanation" as "plan" and routes loops exclusively to Tutor Agent'
+  );
+
   console.log('\n=====================================================');
   console.log(`  AUDIT TEST SUMMARY: ${passedCount} / ${totalCount} PASSED`);
   console.log('=====================================================');

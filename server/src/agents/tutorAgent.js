@@ -435,6 +435,8 @@ $$a^2 + b^2 = c^2 \\implies c = \\sqrt{a^2 + b^2}$$
     }
 
     const q = query.toLowerCase();
+    const hasWord = (w) => new RegExp(`\\b${w}\\b`, 'i').test(q);
+    const hasAnyWord = (...words) => words.some(w => new RegExp(`\\b${w}\\b`, 'i').test(q));
 
     // ==========================================
     // 1. MATHEMATICS & CALCULUS
@@ -949,9 +951,89 @@ The solution is strongly acidic ($\\text{pH} = 2.3 < 7$).
     // ==========================================
     // 5. COMPUTER SCIENCE & ALGORITHMS
     // ==========================================
+    // 5a. LOOPS & CONTROL FLOW IN PROGRAMMING
+    if (hasAnyWord('loop', 'loops', 'iteration', 'iterating', 'iterate') || 
+        q.includes('for loop') || q.includes('while loop') || q.includes('do while') || 
+        q.includes('do-while') || q.includes('infinite loop') || q.includes('nested loop')) {
+      return {
+        explanation: `### 💻 Computer Science: Loops, Iteration & Control Flow
+
+### 🌟 Intuitive Mental Model & Real-World Analogy
+Think of a runner on an Olympic athletics track:
+* **The \`for\` Loop** is running a fixed, pre-counted 4-lap relay: \`for lap in range(4)\`. You know the exact start, end, and number of iterations before you take your first stride.
+* **The \`while\` Loop** is running until you run out of energy: \`while energy > 0\`. You don't know the exact lap count in advance; you keep circling as long as the condition holds true.
+* **An Infinite Loop** is running forever without checking your energy or forgetting to increment your lap counter—you run continuously until you collapse (**System Crash / Freeze**).
+
+### 🔍 Core Principles & Mechanism
+#### 1. The Anatomy of Every Loop
+1. **Initialization**: Declaring the loop counter or iterator (e.g. \`i = 0\`).
+2. **Termination Condition**: Boolean check evaluated before each cycle. If \`false\`, the loop halts immediately.
+3. **Execution Body**: The block of code executed on each cycle.
+4. **Step / Increment**: Updating the loop state (e.g. \`i += 1\`) so it advances towards termination.
+
+#### 2. Loop Types Compared
+| Loop Construct | When to Use | Execution Guarantee |
+| :--- | :--- | :--- |
+| **\`for\` loop** | Iterating over known sequences, ranges, arrays, or collections | Runs exactly for the length of the iterable (0 to $N$ times) |
+| **\`while\` loop** | Event-driven loops, games, input polling, or convergence algorithms | Runs 0 or more times until condition evaluates to \`false\` |
+| **\`do-while\` loop** | Scenarios where the body must execute at least once before checking | Guaranteed to run at least 1 time |
+
+#### 3. Control Flow Modifiers
+* \`break\`: Terminates the loop prematurely and jumps immediately to the statement following the loop.
+* \`continue\`: Skips the remainder of the current iteration and jumps directly to the next cycle.
+
+### 💡 Concrete Worked Example
+Summing numbers 1 through 5 using both \`for\` and \`while\` in Python:
+\`\`\`python
+# 1. Definite For Loop with range(start, stop_exclusive)
+total_for = 0
+for i in range(1, 6): # generates 1, 2, 3, 4, 5
+    total_for += i
+print(f"For loop sum: {total_for}")  # Output: 15
+
+# 2. Indefinite While Loop with explicit counter
+total_while = 0
+counter = 1
+while counter <= 5:
+    total_while += counter
+    counter += 1 # Crucial update step!
+print(f"While loop sum: {total_while}")  # Output: 15
+
+# 3. Early exit using break
+for num in [2, 4, 7, 8, 10]:
+    if num % 2 != 0:
+        print(f"Found first odd number: {num}")
+        break  # Halts loop immediately at 7
+\`\`\`
+
+### ⚠️ Common Misconceptions & Exam Traps
+* **Trap 1: The Off-By-One Error (OBOE)**: Forgetting that zero-indexed ranges like \`range(5)\` generate indices \`0, 1, 2, 3, 4\` (5 iterations, stopping strictly before 5). Accessing \`arr[5]\` on a 5-element array triggers an \`IndexOutOfBounds\` exception!
+* **Trap 2: The Infinite Loop**: Forgetting to update loop variables inside a \`while\` loop (e.g. omitting \`i += 1\`), causing the loop condition to remain \`True\` forever.`,
+        flashcards: [
+          {
+            front: 'What is the primary difference between a for loop and a while loop?',
+            back: 'A for loop is used for definite iteration over a known range or collection; a while loop is used for indefinite iteration that continues as long as a boolean condition remains true.',
+            topic: 'Programming Loops'
+          },
+          {
+            front: 'What is an Off-By-One Error (OBOE) in loop programming?',
+            back: 'A logic error where a loop iterates one time too many or one time too few, typically caused by confusing < with <= or misunderstanding zero-based indexing.',
+            topic: 'Programming Loops'
+          }
+        ],
+        practiceQuestion: {
+          question: 'What is the final value of variable "count" after executing this code:\ncount = 0\nfor i in range(1, 5):\n    count += i',
+          options: ['10', '15', '6', '14'],
+          answerIndex: 0,
+          explanation: 'range(1, 5) generates values 1, 2, 3, 4 (stopping before 5). Sum: 1 + 2 + 3 + 4 = 10.'
+        }
+      };
+    }
+
     if (q.includes('binary search')) {
       return {
         explanation: `### 💻 Computer Science: Binary Search Algorithm & Logarithmic Efficiency
+
 
 ### 🌟 Intuitive Mental Model & Real-World Analogy
 Imagine guessing a secret number between 1 and 100 where after every guess you are told "higher" or "lower".
@@ -1015,7 +1097,7 @@ numbers = [2, 5, 8, 12, 16, 23, 38, 56, 72, 91]
       };
     }
 
-    if (q.includes('oop') || q.includes('object oriented') || q.includes('encapsulation') || q.includes('polymorphism') || q.includes('inheritance')) {
+    if (hasAnyWord('oop', 'oops') || q.includes('object oriented') || q.includes('encapsulation') || q.includes('polymorphism') || q.includes('inheritance')) {
       return {
         explanation: `### 💻 Software Engineering: The 4 Pillars of Object-Oriented Programming (OOP)
 
@@ -1090,7 +1172,7 @@ for s in shapes:
       };
     }
 
-    if (q.includes('api') || q.includes('rest') || q.includes('http') || q.includes('endpoint')) {
+    if (hasAnyWord('api', 'apis', 'rest', 'restful', 'endpoint', 'endpoints') || q.includes('rest api') || q.includes('http')) {
       return {
         explanation: `### 🌐 Web Architecture: RESTful APIs & Client-Server Communication
 

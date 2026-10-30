@@ -187,35 +187,33 @@ export class ManagerAgent {
     }
 
     const text = userMessage.toLowerCase();
+    const hasWord = (w) => new RegExp(`\\b${w}\\b`, 'i').test(text);
+    const hasAnyWord = (...words) => words.some(w => new RegExp(`\\b${w}\\b`, 'i').test(text));
     const agents = new Set();
 
-    // Study Planner triggers
-    if (text.includes('plan') || text.includes('schedule') || text.includes('timetable') || 
-        text.includes('routine') || text.includes('calendar') || text.includes('study hours') ||
-        text.includes('today') || text.includes('week') || text.includes('time management') ||
-        text.includes('organize my day') || text.includes('when should i study')) {
+    // Study Planner triggers (word-bounded to avoid matching "explanation")
+    if (hasAnyWord('plan', 'plans', 'planner', 'schedule', 'schedules', 'timetable', 'routine', 'calendar', 'study hours') ||
+        text.includes('time management') || text.includes('organize my day') || text.includes('when should i study') ||
+        (hasWord('today') && hasAnyWord('study', 'do')) || (hasWord('week') && hasAnyWord('study', 'routine'))) {
       agents.add('planner');
     }
 
-    // Assignment Solver triggers
-    if (text.includes('assignment') || text.includes('homework') || text.includes('lab') ||
-        text.includes('deadline') || text.includes('submit') || text.includes('problem set') ||
-        text.includes('break down') || text.includes('solve problem') || text.includes('task')) {
+    // Assignment Solver triggers (word-bounded to avoid matching "elaborate")
+    if (hasAnyWord('assignment', 'assignments', 'homework', 'lab', 'labs', 'deadline', 'deadlines', 'problem set') ||
+        text.includes('break down') || text.includes('solve problem') || (hasWord('submit') && hasWord('task'))) {
       agents.add('assignment');
     }
 
     // Exam Specialist triggers
-    if (text.includes('exam') || text.includes('test') || text.includes('quiz') ||
-        text.includes('mock') || text.includes('practice question') || text.includes('midterm') ||
-        text.includes('revision') || text.includes('score') || text.includes('assess me')) {
+    if (hasAnyWord('exam', 'exams', 'test', 'tests', 'quiz', 'quizzes', 'mock', 'midterm', 'midterms') ||
+        text.includes('practice question') || text.includes('assess me') || hasWord('revision')) {
       agents.add('exam');
     }
 
     // AI Tutor triggers
-    if (text.includes('explain') || text.includes('what is') || text.includes('how does') ||
-        text.includes('why') || text.includes('concept') || text.includes('notes') ||
-        text.includes('flashcard') || text.includes('analogy') || text.includes('teach me') ||
-        text.includes('understand') || text.includes('difference between') ||
+    if (hasAnyWord('explain', 'explanation', 'concept', 'notes', 'flashcard', 'flashcards', 'analogy', 'teach', 'understand', 'loop', 'loops') ||
+        text.includes('what is') || text.includes('what are') || text.includes('how does') ||
+        text.includes('how do') || text.includes('difference between') || hasWord('why') ||
         agents.size === 0) {
       agents.add('tutor');
     }
