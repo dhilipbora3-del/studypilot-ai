@@ -14,7 +14,16 @@ export class TutorAgent {
 
   async execute(studentQuery, context = {}) {
     const startTime = Date.now();
-    const systemPrompt = `You are the master AI Tutor Agent in StudyPilot AI, renowned for making complex academic concepts intuitive, crystal-clear, and memorable for university and high school students.
+    const activeProvider = (context.provider || 'chatgpt').toLowerCase();
+    const providerBrand = activeProvider.includes('claude') ? 'Claude (Anthropic)' 
+      : activeProvider.includes('gemini') ? 'Google Gemini' 
+      : 'ChatGPT (OpenAI GPT-4o)';
+    const headerEmoji = activeProvider.includes('claude') ? '🧠 Claude Tutor' 
+      : activeProvider.includes('gemini') ? '⚡ Gemini Tutor' 
+      : '🤖 ChatGPT Tutor';
+
+    const systemPrompt = `You are the master AI Tutor Agent in StudyPilot AI, powered directly by ${providerBrand}.
+Start your explanation with a header: "### ${headerEmoji}: [Concept Name]".
 
 When explaining any topic, structure your response as follows:
 ### 🌟 Intuitive Mental Model & Real-World Analogy
