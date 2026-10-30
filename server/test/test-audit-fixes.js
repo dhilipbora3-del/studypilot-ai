@@ -260,6 +260,61 @@ async function runAuditTests() {
     'DashboardView derives urgent assignment count from server stats with client fallback'
   );
 
+  // --------------------------------------------------------------------------
+  // TEST GROUP 6: High-Precision Pedagogical & Problem Solving Engine Accuracy
+  // --------------------------------------------------------------------------
+  console.log('\n--- TEST GROUP 6: Academic Engine Accuracy & Proper Solutions ---');
+
+  // 6a. Linear equation solving: 2x + 5 = 15 => x = 5
+  const linearRes = await tutorAgent.execute('solve 2x + 5 = 15', { provider: 'offline' });
+  assert(
+    linearRes.output.includes('x = 5') && linearRes.output.includes('Identity holds'),
+    'TutorAgent solves linear equation with step-by-step algebra and verified answer x = 5'
+  );
+
+  // 6b. Quadratic equation solving: x^2 - 5x + 6 = 0 => x = 2 and x = 3
+  const quadRes = await tutorAgent.execute('solve x^2 - 5x + 6 = 0', { provider: 'offline' });
+  assert(
+    quadRes.output.includes('x = 3') && quadRes.output.includes('x = 2') && quadRes.output.includes('Quadratic Formula'),
+    'TutorAgent solves quadratic equation via quadratic formula with exact roots x = 2, 3'
+  );
+
+  // 6c. Percentage calculation: 15% of 240 => 36
+  const pctRes = await tutorAgent.execute('what is 15% of 240', { provider: 'offline' });
+  assert(
+    pctRes.output.includes('36') && pctRes.output.includes('Percentage Rate'),
+    'TutorAgent accurately calculates percentages with formula and steps (15% of 240 = 36)'
+  );
+
+  // 6d. Biology: Photosynthesis
+  const photoRes = await tutorAgent.execute('Explain photosynthesis', { provider: 'offline' });
+  assert(
+    photoRes.output.includes('RuBisCO') && photoRes.output.includes('Calvin Cycle') && photoRes.output.includes('Photosynthesis'),
+    'TutorAgent explains photosynthesis with biochemical depth (RuBisCO, Calvin cycle, equations)'
+  );
+  assert(
+    photoRes.practiceQuestion && (photoRes.practiceQuestion.question.includes('photosynthesis') || photoRes.practiceQuestion.options.includes('RuBisCO')),
+    'TutorAgent attaches topic-specific photosynthesis practice question'
+  );
+
+  // 6e. Computer Science: Binary Search
+  const bsRes = await tutorAgent.execute('What is binary search algorithm?', { provider: 'offline' });
+  assert(
+    bsRes.output.includes('O(\\log n)') && bsRes.output.includes('def binary_search'),
+    'TutorAgent provides O(log n) complexity analysis and Python implementation for Binary Search'
+  );
+  assert(
+    bsRes.practiceQuestion && bsRes.practiceQuestion.question.includes('1,024'),
+    'TutorAgent attaches topic-specific logarithmic search practice question'
+  );
+
+  // 6f. Custom / Humanities: French Revolution
+  const historyRes = await tutorAgent.execute('Explain the French Revolution', { provider: 'offline' });
+  assert(
+    historyRes.output.includes('French Revolution') && historyRes.output.includes('History & Political Science'),
+    'TutorAgent dynamically synthesizes domain-specific structured breakdown for humanities queries'
+  );
+
   console.log('\n=====================================================');
   console.log(`  AUDIT TEST SUMMARY: ${passedCount} / ${totalCount} PASSED`);
   console.log('=====================================================');
