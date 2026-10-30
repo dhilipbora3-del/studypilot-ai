@@ -8,6 +8,7 @@ import {
   ShieldCheck, 
   PlusCircle, 
   Check, 
+  Copy,
   Layers, 
   Calendar, 
   CheckSquare, 
@@ -23,6 +24,8 @@ import {
 } from 'lucide-react';
 import AgentTraceViewer from './AgentTraceViewer';
 import AISettingsModal from './AISettingsModal';
+import MarkdownRenderer from './MarkdownRenderer';
+import PracticeQuestionCard from './PracticeQuestionCard';
 import { 
   apiChat, 
   apiFlashcards, 
@@ -46,6 +49,7 @@ export default function ChatStudioView({ initialPrompt = '', onActionCompleted }
   const [activeProvider, setActiveProviderState] = useState(getActiveProvider() || 'chatgpt');
   const [activeModel, setActiveModelState] = useState(getActiveModel(getActiveProvider() || 'chatgpt'));
   const [hasCustomKey, setHasCustomKey] = useState(Boolean(getProviderKey(getActiveProvider() || 'chatgpt')));
+  const [copiedMessageId, setCopiedMessageId] = useState(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -170,6 +174,13 @@ Select an agent below and switch between **ChatGPT**, **Claude**, and **Gemini**
       setMessages([]);
       loadChatHistory();
     }
+  };
+
+  const handleCopySolution = (msgId, text) => {
+    const cleanText = text ? text.replace(/### 🃏 Active Recall[\s\S]*$/, '').trim() : '';
+    navigator.clipboard.writeText(cleanText || text);
+    setCopiedMessageId(msgId);
+    setTimeout(() => setCopiedMessageId(null), 2000);
   };
 
   const handleSaveFlashcards = async (msgId, cards = []) => {
@@ -341,69 +352,115 @@ Select an agent below and switch between **ChatGPT**, **Claude**, and **Gemini**
           const isUser = msg.role === 'user';
           const hasTraces = msg.agentTraces && msg.agentTraces.length > 0;
           const meta = msg.metadata || {};
+          const isCopied = copiedMessageId === msg.id;
 
           return (
             <div
               key={msg.id || index}
               className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-full`}
             >
-              <div className="flex items-start space-x-2.5 max-w-3xl">
+              <div className="flex items-start space-x-2.5 max-w-3xl w-full">
                 {!isUser && (
                   <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center shrink-0 mt-0.5 shadow-md shadow-indigo-600/30">
                     <Bot className="w-4 h-4 text-white" />
                   </div>
                 )}
 
-                <div className={`p-4 rounded-2xl text-sm leading-relaxed ${
+                <div className={`p-4 rounded-2xl text-sm leading-relaxed w-full ${
                   isUser
-                    ? 'bg-indigo-600 text-white rounded-tr-none shadow-md shadow-indigo-600/20'
+                    ? 'bg-indigo-600 text-white rounded-tr-none shadow-md shadow-indigo-600/20 max-w-2xl'
                     : 'bg-slate-800/90 text-slate-200 border border-slate-700/80 rounded-tl-none shadow-lg'
                 }`}>
-                  {/* Message body text with clean formatting */}
-                  <div className="space-y-2 whitespace-pre-line font-sans leading-relaxed">
-                    {msg.content}
-                  </div>
+                  {isUser ? (
+                    <div className="font-sans leading-relaxed whitespace-pre-wrap">
+                      {msg.content}
+                    </div>
+                  ) : (
+                    <>
+                      {/* Clean Solution Top Bar */}
+                      <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-700/60 text-xs text-slate-400">
+                        <div className="flex items-center gap-1.5 font-medium">
+                          <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                          <span className="text-slate-300 font-semibold">StudyPilot Verified Solution</span>
+                          {msg.totalExecutionTimeMs && (
+                            <span className="text-[11px] text-slate-500">
+                              • {(msg.totalExecutionTimeMs / 1000).toFixed(1)}s
+                            </span>
+                          )}
+                        </div>
 
-                  {/* Inline Flashcards Widget */}
-                  {meta.flashcards && meta.flashcards.length > 0 && (
-                    <div className="mt-4 p-3.5 rounded-xl bg-slate-900/90 border border-indigo-500/30 space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-indigo-300 flex items-center">
-                          <Layers className="w-3.5 h-3.5 mr-1" />
-                          Generated Active Recall Cards ({meta.flashcards.length})
-                        </span>
                         <button
-                          onClick={() => handleSaveFlashcards(msg.id, meta.flashcards)}
-                          disabled={importStatus[`fc_${msg.id}`] === 'saved'}
-                          className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-emerald-600 text-white text-[11px] font-semibold flex items-center space-x-1 transition"
+                          onClick={() => handleCopySolution(msg.id, msg.content)}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-900/80 hover:bg-slate-750 text-slate-300 hover:text-white transition text-[11px] border border-slate-700/60 shadow-sm"
+                          title="Copy clean solution"
                         >
-                          {importStatus[`fc_${msg.id}`] === 'saved' ? (
+                          {isCopied ? (
                             <>
-                              <Check className="w-3 h-3" />
-                              <span>Saved to Decks</span>
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              <span className="text-emerald-400 font-medium">Copied!</span>
                             </>
                           ) : (
                             <>
-                              <PlusCircle className="w-3 h-3" />
-                              <span>Save to Flashcards</span>
+                              <Copy className="w-3.5 h-3.5 text-slate-400" />
+                              <span>Copy Solution</span>
                             </>
                           )}
                         </button>
                       </div>
 
-                      <div className="space-y-2">
-                        {meta.flashcards.map((card, cIdx) => (
-                          <div key={cIdx} className="p-2.5 rounded-lg bg-slate-800/80 border border-slate-700 text-xs">
-                            <span className="font-semibold text-slate-200 block mb-1">
-                              Q: {card.front}
+                      {/* Clean Markdown Solution */}
+                      <MarkdownRenderer
+                        content={msg.content}
+                        hideTrailers={Boolean(meta.flashcards?.length || meta.practiceQuestion)}
+                      />
+
+                      {/* Interactive Practice Question Checkpoint */}
+                      {meta.practiceQuestion && (
+                        <PracticeQuestionCard questionData={meta.practiceQuestion} />
+                      )}
+
+                      {/* Inline Flashcards Widget */}
+                      {meta.flashcards && meta.flashcards.length > 0 && (
+                        <div className="mt-4 p-3.5 rounded-xl bg-slate-900/90 border border-indigo-500/30 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-indigo-300 flex items-center">
+                              <Layers className="w-3.5 h-3.5 mr-1" />
+                              Active Recall Flashcards ({meta.flashcards.length})
                             </span>
-                            <span className="text-slate-400 block whitespace-pre-line">
-                              A: {card.back}
-                            </span>
+                            <button
+                              onClick={() => handleSaveFlashcards(msg.id, meta.flashcards)}
+                              disabled={importStatus[`fc_${msg.id}`] === 'saved'}
+                              className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-emerald-600 text-white text-[11px] font-semibold flex items-center space-x-1 transition"
+                            >
+                              {importStatus[`fc_${msg.id}`] === 'saved' ? (
+                                <>
+                                  <Check className="w-3 h-3" />
+                                  <span>Saved to Decks</span>
+                                </>
+                              ) : (
+                                <>
+                                  <PlusCircle className="w-3 h-3" />
+                                  <span>Save to Flashcards</span>
+                                </>
+                              )}
+                            </button>
                           </div>
-                        ))}
-                      </div>
-                    </div>
+
+                          <div className="space-y-2">
+                            {meta.flashcards.map((card, cIdx) => (
+                              <div key={cIdx} className="p-2.5 rounded-lg bg-slate-800/80 border border-slate-700 text-xs">
+                                <span className="font-semibold text-slate-200 block mb-1">
+                                  Q: {card.front}
+                                </span>
+                                <span className="text-slate-400 block whitespace-pre-line">
+                                  A: {card.back}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
 
                   {/* Inline Schedule Slots Widget */}
