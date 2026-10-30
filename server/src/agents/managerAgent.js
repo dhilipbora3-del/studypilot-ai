@@ -24,6 +24,7 @@ export class ManagerAgent {
     const userId = options.userId || 1;
     const apiKey = options.apiKey || null;
     const provider = options.provider || null;
+    const model = options.model || null;
 
     // Step 1: Manager Analysis & Intent Decomposition
     const analysisStart = Date.now();
@@ -45,7 +46,7 @@ export class ManagerAgent {
     // Step 2: Invoke designated agents with user context & optional API key
     for (const agentType of intentPlan.targetAgents) {
       if (agentType === 'tutor') {
-        const res = await tutorAgent.execute(userMessage, { studentContext, apiKey, provider });
+        const res = await tutorAgent.execute(userMessage, { studentContext, apiKey, provider, model });
         subAgentResults.tutor = res;
         traces.push({
           agent: tutorAgent.name,
@@ -67,7 +68,8 @@ export class ManagerAgent {
           assignments: studentContext.assignments,
           exams: studentContext.exams,
           apiKey,
-          provider
+          provider,
+          model
         });
         subAgentResults.planner = res;
         traces.push({
@@ -85,7 +87,8 @@ export class ManagerAgent {
         const res = await assignmentAgent.guideProblem(userMessage, {
           subject: studentContext.subjects[0]?.name,
           apiKey,
-          provider
+          provider,
+          model
         });
         subAgentResults.assignment = res;
         traces.push({
@@ -110,7 +113,8 @@ export class ManagerAgent {
           topic: userMessage,
           count: 3,
           apiKey,
-          provider
+          provider,
+          model
         });
         subAgentResults.exam = res;
         traces.push({

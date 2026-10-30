@@ -3,12 +3,39 @@ import { isLLMConfigured, testAPIKey } from '../agents/llmClient.js';
 
 const router = Router();
 
-// GET /api/agents/status - System status of the 6 agents
+// GET /api/agents/status - System status of the 6 agents & 3 flagship AI engines
 router.get('/status', (req, res) => {
   const geminiConfigured = Boolean(process.env.GEMINI_API_KEY);
-  const openaiConfigured = Boolean(process.env.OPENAI_API_KEY);
-  const groqConfigured = Boolean(process.env.GROQ_API_KEY);
+  const chatgptConfigured = Boolean(process.env.OPENAI_API_KEY || process.env.CHATGPT_API_KEY);
+  const claudeConfigured = Boolean(process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY);
   const llmActive = isLLMConfigured();
+
+  const engines = [
+    {
+      id: 'chatgpt',
+      name: 'ChatGPT',
+      developer: 'OpenAI',
+      models: ['gpt-4o', 'gpt-4o-mini'],
+      configured: chatgptConfigured,
+      description: 'World-renowned conversational reasoning and problem-solving model.'
+    },
+    {
+      id: 'claude',
+      name: 'Claude',
+      developer: 'Anthropic',
+      models: ['claude-3-5-sonnet', 'claude-3-haiku'],
+      configured: claudeConfigured,
+      description: 'Industry-leading nuanced conceptual explanations and academic rigor.'
+    },
+    {
+      id: 'gemini',
+      name: 'Google Gemini',
+      developer: 'Google DeepMind',
+      models: ['gemini-1.5-flash', 'gemini-2.0-flash'],
+      configured: geminiConfigured,
+      description: 'High-speed multimodal reasoning with free API keys via Google AI Studio.'
+    }
+  ];
 
   const agents = [
     {
@@ -61,30 +88,42 @@ router.get('/status', (req, res) => {
     }
   ];
 
+  let primaryProvider = 'ChatGPT / Claude / Gemini Tri-Engine Ready';
+  if (geminiConfigured && chatgptConfigured && claudeConfigured) {
+    primaryProvider = 'ChatGPT + Claude + Gemini (All Active)';
+  } else if (geminiConfigured) {
+    primaryProvider = 'Google Gemini 1.5/2.0 API';
+  } else if (chatgptConfigured) {
+    primaryProvider = 'ChatGPT GPT-4o API';
+  } else if (claudeConfigured) {
+    primaryProvider = 'Claude 3.5 Sonnet API';
+  }
+
   res.json({
     success: true,
     system: {
-      llmActive: true,
-      primaryProvider: geminiConfigured ? 'Google Gemini 1.5/2.0 API' : (openaiConfigured ? 'OpenAI GPT-4o-mini' : 'Integrated ChatGPT Engine (Live)'),
+      llmActive,
+      primaryProvider,
       geminiConfigured,
-      openaiConfigured,
-      groqConfigured,
-      offlineFallbackReady: true,
+      chatgptConfigured,
+      claudeConfigured,
+      supportedEngines: ['chatgpt', 'claude', 'gemini'],
       agentsCount: agents.length
     },
+    engines,
     agents
   });
 });
 
-// POST /api/agents/test-key - Test user-provided Gemini/OpenAI API key
+// POST /api/agents/test-key - Test user-provided ChatGPT, Claude, or Gemini API key
 router.post('/test-key', async (req, res) => {
   try {
-    const { apiKey, provider = 'gemini' } = req.body;
+    const { apiKey, provider = 'gemini', model = null } = req.body;
     if (!apiKey) {
       return res.status(400).json({ error: 'API key is required' });
     }
 
-    const testRes = await testAPIKey(apiKey.trim(), provider);
+    const testRes = await testAPIKey(apiKey.trim(), provider, model);
     res.json(testRes);
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

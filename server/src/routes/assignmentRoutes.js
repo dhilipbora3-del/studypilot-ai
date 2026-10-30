@@ -57,14 +57,15 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Subject, title, and due date are required' });
     }
 
-    const apiKey = req.headers['x-gemini-key'] || req.headers['x-llm-key'] || req.body.apiKey;
+    const apiKey = req.headers['x-gemini-key'] || req.headers['x-llm-key'] || req.headers['x-api-key'] || req.body.apiKey;
     const provider = req.headers['x-llm-provider'] || req.body.provider;
+    const model = req.headers['x-llm-model'] || req.body.model;
 
     let subtasks = [];
     if (autoBreakdown) {
       const breakdownResult = await assignmentAgent.breakdownAssignment(
         { title, description, estimated_minutes, due_date },
-        { apiKey, provider }
+        { apiKey, provider, model }
       );
       subtasks = breakdownResult.subtasks;
     }
@@ -103,9 +104,10 @@ router.post('/:id/breakdown', async (req, res) => {
     const assignment = db.prepare('SELECT * FROM assignments WHERE id = ? AND user_id = ?').get(id, userId);
     if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
 
-    const apiKey = req.headers['x-gemini-key'] || req.headers['x-llm-key'] || req.body.apiKey;
+    const apiKey = req.headers['x-gemini-key'] || req.headers['x-llm-key'] || req.headers['x-api-key'] || req.body.apiKey;
     const provider = req.headers['x-llm-provider'] || req.body.provider;
-    const breakdownResult = await assignmentAgent.breakdownAssignment(assignment, { apiKey, provider });
+    const model = req.headers['x-llm-model'] || req.body.model;
+    const breakdownResult = await assignmentAgent.breakdownAssignment(assignment, { apiKey, provider, model });
     
     db.prepare('UPDATE assignments SET subtasks = ? WHERE id = ? AND user_id = ?')
       .run(JSON.stringify(breakdownResult.subtasks), id, userId);

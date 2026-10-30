@@ -20,7 +20,7 @@ export class ExamAgent {
   /**
    * Generates a mock quiz
    */
-  async generateMockTest({ subjectName, topic, count = 4, difficulty = 'medium', apiKey = null, provider = null }) {
+  async generateMockTest({ subjectName, topic, count = 4, difficulty = 'medium', apiKey = null, provider = null, model = null }) {
     const startTime = Date.now();
     const systemPrompt = `You are the Exam Agent in StudyPilot AI.
 Create a high-quality ${count}-question multiple-choice practice test on "${topic || subjectName}".
@@ -41,7 +41,8 @@ Return a STRICT JSON array of objects with keys:
       responseFormat: 'json',
       temperature: 0.3,
       apiKey,
-      provider
+      provider,
+      model
     });
 
     let questions = [];

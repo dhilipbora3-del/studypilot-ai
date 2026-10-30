@@ -65,7 +65,8 @@ Upcoming Exams: ${JSON.stringify(exams.map(e => ({ title: e.title, date: e.exam_
       userPrompt, 
       temperature: 0.3,
       apiKey: params.apiKey,
-      provider: params.provider
+      provider: params.provider,
+      model: params.model
     });
     if (llmResult.success) {
       llmNotes = llmResult.content;

@@ -8,9 +8,13 @@ const router = Router();
 router.post('/', async (req, res) => {
   try {
     const userId = req.user?.id || 1;
-    const { message, dailyStudyHours, selectedAgent, apiKey, provider } = req.body;
-    const headerKey = req.headers['x-gemini-key'] || req.headers['x-llm-key'];
+    const { message, dailyStudyHours, selectedAgent, apiKey, provider, model } = req.body;
+    const headerKey = req.headers['x-llm-key'] || req.headers['x-gemini-key'] || req.headers['x-api-key'];
+    const headerProvider = req.headers['x-llm-provider'];
+    const headerModel = req.headers['x-llm-model'];
     const activeKey = apiKey || headerKey;
+    const activeProvider = provider || headerProvider;
+    const activeModel = model || headerModel;
 
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return res.status(400).json({ error: 'Message cannot be empty' });
@@ -26,7 +30,8 @@ router.post('/', async (req, res) => {
       userId,
       selectedAgent,
       apiKey: activeKey,
-      provider
+      provider: activeProvider,
+      model: activeModel
     });
 
     // Save assistant response + full agent trace in DB

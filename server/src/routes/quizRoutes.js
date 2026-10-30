@@ -72,8 +72,9 @@ router.post('/generate', async (req, res) => {
       if (sub) subjectName = sub.name;
     }
 
-    const apiKey = req.headers['x-gemini-key'] || req.headers['x-llm-key'] || req.body.apiKey;
+    const apiKey = req.headers['x-gemini-key'] || req.headers['x-llm-key'] || req.headers['x-api-key'] || req.body.apiKey;
     const provider = req.headers['x-llm-provider'] || req.body.provider;
+    const model = req.headers['x-llm-model'] || req.body.model;
 
     const examResult = await examAgent.generateMockTest({
       subjectName,
@@ -81,7 +82,8 @@ router.post('/generate', async (req, res) => {
       count: Number(count) || 4,
       difficulty,
       apiKey,
-      provider
+      provider,
+      model
     });
 
     const title = `${subjectName}: ${topic || 'Practice Mock Test'}`;

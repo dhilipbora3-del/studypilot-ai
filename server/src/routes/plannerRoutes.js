@@ -50,8 +50,9 @@ router.post('/generate', async (req, res) => {
     const userAssignments = db.prepare('SELECT * FROM assignments WHERE user_id = ? AND status != "completed" ORDER BY due_date ASC').all(userId);
     const userExams = db.prepare('SELECT * FROM exams WHERE user_id = ? ORDER BY exam_date ASC').all(userId);
 
-    const apiKey = req.headers['x-gemini-key'] || req.headers['x-llm-key'] || req.body.apiKey;
+    const apiKey = req.headers['x-gemini-key'] || req.headers['x-llm-key'] || req.headers['x-api-key'] || req.body.apiKey;
     const provider = req.headers['x-llm-provider'] || req.body.provider;
+    const model = req.headers['x-llm-model'] || req.body.model;
 
     const plan = await plannerAgent.generateSchedule({
       date: date || new Date().toISOString().split('T')[0],
@@ -64,7 +65,8 @@ router.post('/generate', async (req, res) => {
       assignments: userAssignments,
       exams: userExams,
       apiKey,
-      provider
+      provider,
+      model
     });
 
     const review = await reviewAgent.review({

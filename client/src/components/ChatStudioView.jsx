@@ -23,7 +23,16 @@ import {
 } from 'lucide-react';
 import AgentTraceViewer from './AgentTraceViewer';
 import AISettingsModal from './AISettingsModal';
-import { apiChat, apiFlashcards, apiPlanner, getCustomLLMKey, getCustomLLMProvider } from '../api';
+import { 
+  apiChat, 
+  apiFlashcards, 
+  apiPlanner, 
+  getActiveProvider, 
+  setActiveProvider, 
+  getActiveModel, 
+  setActiveModel, 
+  getProviderKey 
+} from '../api';
 
 export default function ChatStudioView({ initialPrompt = '', onActionCompleted }) {
   const [messages, setMessages] = useState([]);
@@ -33,13 +42,31 @@ export default function ChatStudioView({ initialPrompt = '', onActionCompleted }
   const [selectedAgent, setSelectedAgent] = useState('auto'); // 'auto', 'tutor', 'planner', 'assignment', 'exam'
   const [importStatus, setImportStatus] = useState({});
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [hasCustomKey, setHasCustomKey] = useState(Boolean(getCustomLLMKey()));
+  
+  const [activeProvider, setActiveProviderState] = useState(getActiveProvider() || 'chatgpt');
+  const [activeModel, setActiveModelState] = useState(getActiveModel(getActiveProvider() || 'chatgpt'));
+  const [hasCustomKey, setHasCustomKey] = useState(Boolean(getProviderKey(getActiveProvider() || 'chatgpt')));
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
     loadChatHistory();
-    setHasCustomKey(Boolean(getCustomLLMKey()));
+    refreshEngineState();
   }, []);
+
+  const refreshEngineState = () => {
+    const prov = getActiveProvider() || 'chatgpt';
+    setActiveProviderState(prov);
+    setActiveModelState(getActiveModel(prov));
+    setHasCustomKey(Boolean(getProviderKey(prov)));
+  };
+
+  const handleSwitchProvider = (prov) => {
+    setActiveProvider(prov);
+    setActiveProviderState(prov);
+    const mod = getActiveModel(prov);
+    setActiveModelState(mod);
+    setHasCustomKey(Boolean(getProviderKey(prov)));
+  };
 
   useEffect(() => {
     if (initialPrompt && initialPrompt.trim().length > 0) {
@@ -66,22 +93,22 @@ export default function ChatStudioView({ initialPrompt = '', onActionCompleted }
             id: 'welcome',
             role: 'assistant',
             content: `### 👋 Welcome to StudyPilot Multi-Agent Studio!
-I am your **Manager Agent**, coordinating a synchronized team of 5 specialized agents:
-- 💡 **AI Tutor**: Explains any concept with analogies, step-by-step notes, and worked examples.
+Powered by **ChatGPT**, **Claude**, and **Google Gemini**:
+- 💡 **AI Tutor**: Deep conceptual mastery, real-world analogies, active-recall flashcards.
 - 📅 **Study Planner**: Optimizes conflict-free timetables with built-in ergonomic breaks.
 - 📋 **Assignment Solver**: Deconstructs deadlines and provides Socratic problem guidance.
 - 🎯 **Exam Specialist**: Prepares diagnostic practice questions and calculates mastery.
 - 🛡️ **Review Agent**: Audits calculations, dates, and schedule collisions before presenting.
 
-Select an agent below or leave on **Auto** to let me coordinate the team!`,
+Select an agent below and switch between **ChatGPT**, **Claude**, and **Gemini** in the top bar!`,
             agentTraces: [
               {
                 agent: 'Manager Agent',
                 role: 'System Initialization',
                 status: 'READY',
-                action: 'Synchronized all 6 autonomous student agents',
-                details: 'Collaborative pipeline initialized and ready for inquiries',
-                executionTimeMs: 3
+                action: 'Synchronized all 6 autonomous student agents with ChatGPT, Claude & Gemini',
+                details: 'Collaborative multi-model pipeline ready for academic inquiries',
+                executionTimeMs: 2
               }
             ],
             metadata: {}
@@ -108,7 +135,7 @@ Select an agent below or leave on **Auto** to let me coordinate the team!`,
     setLoading(true);
 
     try {
-      const result = await apiChat.sendMessage(query.trim(), dailyHours, selectedAgent);
+      const result = await apiChat.sendMessage(query.trim(), dailyHours, selectedAgent, activeProvider, activeModel);
 
       const assistantMsg = {
         id: Date.now() + 1,
@@ -203,7 +230,44 @@ Select an agent below or leave on **Auto** to let me coordinate the team!`,
         </div>
 
         <div className="flex items-center space-x-2 sm:space-x-3 self-end sm:self-auto">
-          {/* AI Key & Provider Config Button */}
+          {/* Flagship Engine Selector Pill (ChatGPT, Claude, Gemini) */}
+          <div className="flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-700/80 space-x-0.5">
+            <button
+              onClick={() => handleSwitchProvider('chatgpt')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+                activeProvider === 'chatgpt'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Switch to OpenAI ChatGPT (GPT-4o)"
+            >
+              <span>ChatGPT</span>
+            </button>
+            <button
+              onClick={() => handleSwitchProvider('claude')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+                activeProvider === 'claude'
+                  ? 'bg-amber-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Switch to Anthropic Claude (Claude 3.5 Sonnet)"
+            >
+              <span>Claude</span>
+            </button>
+            <button
+              onClick={() => handleSwitchProvider('gemini')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+                activeProvider === 'gemini'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Switch to Google Gemini (1.5 / 2.0 Flash)"
+            >
+              <span>Gemini</span>
+            </button>
+          </div>
+
+          {/* AI Key Config Button */}
           <button
             onClick={() => setShowSettingsModal(true)}
             className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
@@ -213,8 +277,8 @@ Select an agent below or leave on **Auto** to let me coordinate the team!`,
             }`}
           >
             <Key className="w-3.5 h-3.5" />
-            <span>{hasCustomKey ? 'AI Key Connected' : 'Configure AI Key'}</span>
-            <span className={`w-2 h-2 rounded-full ${hasCustomKey ? 'bg-emerald-400 animate-pulse' : 'bg-indigo-400'}`} />
+            <span>{hasCustomKey ? 'Key Connected' : 'Configure Key'}</span>
+            <span className={`w-2 h-2 rounded-full ${hasCustomKey ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
           </button>
 
           <button
@@ -253,20 +317,20 @@ Select an agent below or leave on **Auto** to let me coordinate the team!`,
         })}
       </div>
 
-      {/* Optional Free AI Key Notice */}
+      {/* Optional Notice when key is missing */}
       {!hasCustomKey && (
         <div className="px-4 py-2 bg-indigo-950/40 border-b border-indigo-500/20 flex items-center justify-between text-[11px] text-indigo-200">
           <div className="flex items-center space-x-1.5 truncate mr-2">
             <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
             <span className="truncate">
-              <strong>Want unlimited live AI reasoning?</strong> Connect a free Google Gemini key (15s setup, 100% free) for real-time explanations on any textbook or paper.
+              Selected <strong>{activeProvider.toUpperCase()}</strong>. Connect your API key (or switch to <strong>Google Gemini</strong> for a 100% free key with no credit card).
             </span>
           </div>
           <button
             onClick={() => setShowSettingsModal(true)}
             className="px-2.5 py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shrink-0 transition text-[11px]"
           >
-            Connect Free Key
+            Connect Key
           </button>
         </div>
       )}

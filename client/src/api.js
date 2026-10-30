@@ -12,36 +12,86 @@ export function setAuthToken(token) {
   }
 }
 
+export function getActiveProvider() {
+  return localStorage.getItem('studypilot_active_provider') || 'chatgpt';
+}
+
+export function setActiveProvider(provider) {
+  localStorage.setItem('studypilot_active_provider', provider);
+}
+
+export function getProviderKey(provider) {
+  const p = (provider || getActiveProvider()).toLowerCase();
+  const directKey = localStorage.getItem(`studypilot_key_${p}`);
+  if (directKey) return directKey;
+
+  // Legacy fallback
+  const legacyKey = localStorage.getItem('studypilot_llm_key');
+  const legacyProvider = localStorage.getItem('studypilot_llm_provider');
+  if (legacyKey) {
+    if (p === 'claude' && legacyKey.startsWith('sk-ant-')) return legacyKey;
+    if (p === 'gemini' && legacyKey.startsWith('AIza')) return legacyKey;
+    if (p === 'chatgpt' && (legacyKey.startsWith('sk-') && !legacyKey.startsWith('sk-ant-'))) return legacyKey;
+    if (legacyProvider === p) return legacyKey;
+  }
+  return '';
+}
+
+export function setProviderKey(provider, key) {
+  const p = provider.toLowerCase();
+  if (key && key.trim()) {
+    localStorage.setItem(`studypilot_key_${p}`, key.trim());
+    localStorage.setItem('studypilot_llm_key', key.trim());
+    localStorage.setItem('studypilot_llm_provider', p);
+  } else {
+    localStorage.removeItem(`studypilot_key_${p}`);
+  }
+}
+
+export function getActiveModel(provider) {
+  const p = provider || getActiveProvider();
+  const stored = localStorage.getItem(`studypilot_model_${p}`);
+  if (stored) return stored;
+  if (p === 'chatgpt') return 'gpt-4o-mini';
+  if (p === 'claude') return 'claude-3-5-sonnet';
+  if (p === 'gemini') return 'gemini-1.5-flash';
+  return '';
+}
+
+export function setActiveModel(provider, model) {
+  localStorage.setItem(`studypilot_model_${provider}`, model);
+}
+
+// Backwards compatibility wrappers
 export function getCustomLLMKey() {
-  return localStorage.getItem('studypilot_llm_key');
+  return getProviderKey(getActiveProvider());
 }
 
 export function getCustomLLMProvider() {
-  return localStorage.getItem('studypilot_llm_provider') || 'gemini';
+  return getActiveProvider();
 }
 
 export function setCustomLLMKey(key, provider = 'gemini') {
-  if (key) {
-    localStorage.setItem('studypilot_llm_key', key);
-    localStorage.setItem('studypilot_llm_provider', provider);
-  } else {
-    localStorage.removeItem('studypilot_llm_key');
-    localStorage.removeItem('studypilot_llm_provider');
-  }
+  setActiveProvider(provider);
+  setProviderKey(provider, key);
 }
 
 export async function fetchJson(endpoint, options = {}) {
   try {
     const token = getAuthToken();
-    const customKey = getCustomLLMKey();
-    const customProvider = getCustomLLMProvider();
+    const activeProvider = getActiveProvider();
+    const activeKey = getProviderKey(activeProvider);
+    const activeModel = getActiveModel(activeProvider);
+
     const headers = {
       'Content-Type': 'application/json',
       ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-      ...(customKey ? { 
-        'X-Gemini-Key': customKey,
-        'X-LLM-Key': customKey,
-        'X-LLM-Provider': customProvider 
+      ...(activeKey ? { 
+        'X-LLM-Key': activeKey,
+        'X-LLM-Provider': activeProvider,
+        'X-LLM-Model': activeModel,
+        'X-Gemini-Key': activeKey,
+        'X-API-Key': activeKey
       } : {}),
       ...(options.headers || {})
     };
@@ -79,17 +129,20 @@ export const apiAuth = {
 
 // Chat API
 export const apiChat = {
-  sendMessage: (message, dailyStudyHours, selectedAgent = 'auto') =>
-    fetchJson('/chat', {
+  sendMessage: (message, dailyStudyHours, selectedAgent = 'auto', providerOverride = null, modelOverride = null) => {
+    const prov = providerOverride || getActiveProvider();
+    return fetchJson('/chat', {
       method: 'POST',
       body: JSON.stringify({ 
         message, 
         dailyStudyHours, 
         selectedAgent,
-        apiKey: getCustomLLMKey(),
-        provider: getCustomLLMProvider()
+        apiKey: getProviderKey(prov),
+        provider: prov,
+        model: modelOverride || getActiveModel(prov)
       })
-    }),
+    });
+  },
   getHistory: () => fetchJson('/chat/history'),
   clearHistory: () => fetchJson('/chat/history', { method: 'DELETE' })
 };

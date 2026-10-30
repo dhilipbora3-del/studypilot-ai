@@ -55,7 +55,8 @@ Student Context: ${JSON.stringify(context.studentContext || {})}`;
       userPrompt,
       temperature: 0.35,
       apiKey: context.apiKey,
-      provider: context.provider
+      provider: context.provider,
+      model: context.model
     });
 
     let explanation;
@@ -66,6 +67,8 @@ Student Context: ${JSON.stringify(context.studentContext || {})}`;
     if (llmResult.success && llmResult.content) {
       explanation = llmResult.content;
       flashcards = this.extractFlashcardsFromText(explanation, studentQuery);
+      practiceQuestion = this.extractPracticeQuestionFromText(explanation);
+      provider = `${llmResult.provider}${llmResult.model ? ` (${llmResult.model})` : ''}`;
     } else {
       // High-Yield Deep Pedagogical Engine (covers all core academic domains)
       const pedagogicalResponse = this.generateDeepTutorResponse(studentQuery, context);
@@ -845,6 +848,38 @@ When encountering a challenging problem on **${query}**:
       }
     }
     return cards;
+  }
+
+  extractPracticeQuestionFromText(text) {
+    if (!text) return null;
+    try {
+      const qMatch = text.match(/(?:Question|🎯 Conceptual Practice Question):\s*(.+?)(?=\nA[\)\.]|\n\(A\)|\n1[\)\.])/i);
+      const optAMatch = text.match(/(?:A[\)\.]|\(A\))\s*(.+)/i);
+      const optBMatch = text.match(/(?:B[\)\.]|\(B\))\s*(.+)/i);
+      const optCMatch = text.match(/(?:C[\)\.]|\(C\))\s*(.+)/i);
+      const optDMatch = text.match(/(?:D[\)\.]|\(D\))\s*(.+)/i);
+      const ansMatch = text.match(/(?:Correct Answer|Answer):\s*([A-D])/i);
+      const expMatch = text.match(/(?:Explanation):\s*(.+)/i);
+
+      if (qMatch && optAMatch && optBMatch) {
+        const letter = (ansMatch ? ansMatch[1] : 'A').toUpperCase();
+        const letterIndex = { 'A': 0, 'B': 1, 'C': 2, 'D': 3 }[letter] ?? 0;
+        return {
+          question: qMatch[1].trim(),
+          options: [
+            optAMatch[1].trim(),
+            optBMatch[1].trim(),
+            optCMatch ? optCMatch[1].trim() : 'None of the above',
+            optDMatch ? optDMatch[1].trim() : 'All of the above'
+          ],
+          answerIndex: letterIndex,
+          explanation: expMatch ? expMatch[1].trim() : 'Verified conceptual solution.'
+        };
+      }
+    } catch (e) {
+      // ignore parsing error
+    }
+    return null;
   }
 }
 

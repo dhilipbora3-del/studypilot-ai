@@ -95,7 +95,7 @@ export default function AgentSystemModal({ isOpen, onClose, agentStatus }) {
                 <li>Open-ended conversational tutoring on any syllabus</li>
                 <li>Dynamic flashcard deck generation on niche topics</li>
                 <li>Custom mock exam generation for university curricula</li>
-                <li>Configurable via <code className="text-indigo-300">GEMINI_API_KEY</code> or <code className="text-indigo-300">OPENAI_API_KEY</code> in server <code className="text-indigo-300">.env</code></li>
+                <li>Configurable via <code className="text-indigo-300">OPENAI_API_KEY</code> (ChatGPT), <code className="text-amber-300">ANTHROPIC_API_KEY</code> (Claude), or <code className="text-emerald-300">GEMINI_API_KEY</code> (Gemini) in server <code className="text-slate-300">.env</code></li>
               </ul>
             </div>
           </div>

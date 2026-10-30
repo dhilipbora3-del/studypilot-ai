@@ -47,7 +47,8 @@ Estimated Time: ${assignment.estimated_minutes || 90} minutes.`;
       responseFormat: 'json',
       temperature: 0.3,
       apiKey: options.apiKey,
-      provider: options.provider
+      provider: options.provider,
+      model: options.model
     });
 
     let subtasks = [];
@@ -100,7 +101,8 @@ Subject Context: ${context.subject || 'General'}`;
       userPrompt,
       temperature: 0.3,
       apiKey: context.apiKey,
-      provider: context.provider
+      provider: context.provider,
+      model: context.model
     });
 
     let guidance;
