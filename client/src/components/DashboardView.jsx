@@ -35,9 +35,9 @@ export default function DashboardView({
 
   const pendingAssignments = assignments.filter(a => a.status !== 'completed');
   const derivedUrgent = assignments.filter(a => 
-    a.status !== 'completed' && (a.priority === 'urgent' || a.calculated_priority === 'urgent')
+    a.status !== 'completed' && (a.priority === 'urgent' || a.calculated_priority === 'urgent' || (a.due_date && Math.ceil((new Date(a.due_date) - new Date()) / 86400000) <= 2))
   ).length;
-  const urgentCount = stats?.urgentAssignments ?? derivedUrgent;
+  const urgentCount = stats?.urgentAssignments !== undefined ? stats.urgentAssignments : derivedUrgent;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto w-full">

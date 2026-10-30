@@ -211,7 +211,7 @@ async function runAuditTests() {
     'All entity views require confirmation before destructive actions'
   );
 
-  // Check Dialog Escape key support
+  // Check Dialog Escape key, focus trapping, and focus restoration support
   const modals = [
     'client/src/components/SubjectsView.jsx',
     'client/src/components/AssignmentsView.jsx',
@@ -234,6 +234,31 @@ async function runAuditTests() {
       `${path.basename(modalFile)} implements role="dialog" and aria-modal="true"`
     );
   }
+
+  // Check focus trap and previousActiveElement restoration in flagship dialogs
+  const flagshipDialogs = [
+    'client/src/components/AISettingsModal.jsx',
+    'client/src/components/AuthModal.jsx',
+    'client/src/components/AgentSystemModal.jsx'
+  ];
+  for (const fDialog of flagshipDialogs) {
+    const code = fs.readFileSync(path.resolve(fDialog), 'utf-8');
+    assert(
+      code.includes("e.key === 'Tab'") && code.includes('previousActiveElement.current'),
+      `${path.basename(fDialog)} traps Tab focus and restores focus to previous trigger element`
+    );
+  }
+
+  // Check Dashboard graceful error state and retry handling
+  const dashboardCode = fs.readFileSync(path.resolve('client/src/components/DashboardView.jsx'), 'utf-8');
+  assert(
+    dashboardCode.includes('statsError') && dashboardCode.includes('role="alert"') && dashboardCode.includes('onRetryStats'),
+    'DashboardView displays non-blocking graceful error alert with a retry option'
+  );
+  assert(
+    dashboardCode.includes('urgentCount =') && dashboardCode.includes('urgentAssignments'),
+    'DashboardView derives urgent assignment count from server stats with client fallback'
+  );
 
   console.log('\n=====================================================');
   console.log(`  AUDIT TEST SUMMARY: ${passedCount} / ${totalCount} PASSED`);

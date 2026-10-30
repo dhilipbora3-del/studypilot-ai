@@ -316,12 +316,12 @@ Select an agent below or toggle models in the top bar!`,
           <div 
             role="group"
             aria-label="AI Engine Provider Selector"
-            className="flex flex-wrap items-center bg-slate-900/90 p-1 rounded-xl border border-slate-700/80 gap-1"
+            className="flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-700/80 gap-1 overflow-x-auto max-w-full"
           >
             <button
               type="button"
               onClick={() => handleSwitchProvider('chatgpt')}
-              className={`min-h-[44px] sm:min-h-[36px] px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+              className={`min-h-[44px] sm:min-h-[36px] px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 shrink-0 ${
                 activeProvider === 'chatgpt'
                   ? 'bg-emerald-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'
@@ -334,7 +334,7 @@ Select an agent below or toggle models in the top bar!`,
             <button
               type="button"
               onClick={() => handleSwitchProvider('claude')}
-              className={`min-h-[44px] sm:min-h-[36px] px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+              className={`min-h-[44px] sm:min-h-[36px] px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 shrink-0 ${
                 activeProvider === 'claude'
                   ? 'bg-amber-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'
@@ -347,7 +347,7 @@ Select an agent below or toggle models in the top bar!`,
             <button
               type="button"
               onClick={() => handleSwitchProvider('gemini')}
-              className={`min-h-[44px] sm:min-h-[36px] px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+              className={`min-h-[44px] sm:min-h-[36px] px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 shrink-0 ${
                 activeProvider === 'gemini'
                   ? 'bg-indigo-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'
@@ -360,7 +360,7 @@ Select an agent below or toggle models in the top bar!`,
             <button
               type="button"
               onClick={() => handleSwitchProvider('offline')}
-              className={`min-h-[44px] sm:min-h-[36px] px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+              className={`min-h-[44px] sm:min-h-[36px] px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 shrink-0 ${
                 activeProvider === 'offline'
                   ? 'bg-slate-700 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'

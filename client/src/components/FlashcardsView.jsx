@@ -238,7 +238,7 @@ export default function FlashcardsView({ onStudyTopic }) {
       </div>
 
       {/* Leitner Box Progress Summary */}
-      <div className="grid grid-cols-5 gap-2 text-center">
+      <div className="grid grid-cols-5 gap-1 sm:gap-2 text-center">
         {[
           { box: 1, label: 'Box 1: Daily', count: boxCounts[0], color: 'text-rose-400' },
           { box: 2, label: 'Box 2: 2-3 Days', count: boxCounts[1], color: 'text-amber-400' },
@@ -246,9 +246,9 @@ export default function FlashcardsView({ onStudyTopic }) {
           { box: 4, label: 'Box 4: Bi-Weekly', count: boxCounts[3], color: 'text-blue-400' },
           { box: 5, label: 'Box 5: Mastered', count: boxCounts[4], color: 'text-emerald-400' },
         ].map((b) => (
-          <div key={b.box} className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/60">
-            <span className={`text-base font-extrabold ${b.color}`}>{b.count}</span>
-            <span className="block text-[10px] text-slate-400 truncate mt-0.5">{b.label}</span>
+          <div key={b.box} className="p-1.5 sm:p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/60 min-w-0">
+            <span className={`text-sm sm:text-base font-extrabold ${b.color}`}>{b.count}</span>
+            <span className="block text-[9px] sm:text-[10px] text-slate-400 truncate mt-0.5">{b.label}</span>
           </div>
         ))}
       </div>
